@@ -1,0 +1,6 @@
+node_modules/
+dist/
+*.log
+purse-audit.jsonl
+.DS_Store
+.env
