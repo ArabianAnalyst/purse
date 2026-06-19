@@ -11,34 +11,41 @@ This document scopes how that verification should actually work. The naive versi
 
 ## The problem
 
-Detecting that the capability surface changed is mechanically cheap. The hard problem is knowing *which policy rules are now unsound* when it does.
+Detecting that the capability surface changed is mechanically cheap. The hard problem is knowing *which assumptions are now unsound* when it does.
 
-Every policy rule carries an implicit precondition about the capability surface. A `maxPerAction` cap of $5 is only enforceable while every money path funnels through Purse. That rule's soundness depends on the invariant "no unmediated money path exists." When the surface shifts, some of those invariants break and some do not, and re-checking everything on every change is as useless as re-checking nothing.
+A new tool can be harmless alone and still complete a money path in combination with something already present: a generic HTTP client plus a stored payment credential is an unmediated money path.
 
-## Model: a capability-to-policy dependency graph
+## The wrong approach: enumerate composition
 
-Make the preconditions explicit. Model a graph that links each policy rule to the capability-surface invariants it relies on. On any change to the runtime's capabilities, traverse the graph to find rules whose invariants are now at risk, and surface only those for re-evaluation. Targeted, not all-or-nothing.
+The tempting response is to model emergent capabilities, to reason about every way primitives combine into a money path. This is combinatorial and a losing game. You will not enumerate every composition, and the one you miss is the breach.
 
-## The hard part: composition
+## The right approach: reachability by construction
 
-Capabilities are not atomic "money / not-money." A new tool can be individually harmless and still complete a money path in combination with something already present. A generic HTTP-request tool is benign until the runtime also holds a stored payment credential; together they are an unmediated money path.
+Do not enumerate combinations. Make the dangerous primitive unreachable.
 
-So the graph cannot just label tools. It has to reason about emergent capabilities that arise from combinations, the closure of what the agent can do given the full set of primitives. This is where most of the design effort goes, and it is the part worth getting right before writing code.
+The credential lives only in the broker's process, never the agent's. The agent can request a payment; it cannot call the rail. Enforcement is the process boundary, not a policy check inside the agent's reach. Under that design, HTTP plus stored-credential cannot compose, because the credential was never in the agent's scope to begin with. Reachability becomes the question, and the answer is no by construction, not by policy.
 
-## Sketch (to refine)
+This collapses the problem. Composition stops being something you defend against and becomes something that cannot occur.
 
-- **Capability model.** Represent each tool or dependency as a set of primitive effects (network egress, holds-credential-X, can-sign-Y), not as a name.
-- **Rule annotations.** Each policy rule declares the capability-surface invariants it depends on.
-- **Change handler.** On a surface change, recompute the reachable and composed effects, diff against the invariants each rule depends on, and surface the rules now at risk.
-- **Fail closed.** If a change cannot be classified, treat affected rules as violated until re-verified.
+## What is left to verify
+
+The surface does not vanish. It shrinks to one place: the broker's request interface. That is the only thing the agent can reach, so it is the only thing to harden. Keep it minimal (request a payment, nothing that lets the agent shape what the broker does with the request) and validate every field on the broker side. Finite and auditable, instead of combinatorial.
+
+Continuous verification then reduces to two invariants:
+
+1. The agent's process holds no reference to a credential or a rail-calling capability. No new tool or dependency changes this as long as the isolation boundary holds.
+2. The broker's request interface stays narrow and fully validated.
+
+## Where the dependency graph still applies
+
+Policy-level rules (caps, allowlists, categories) can still go stale when their inputs change, and a capability-to-rule map helps decide which rules to re-evaluate. That is a smaller, separate concern from the composition problem above, which the architecture removes rather than manages.
 
 ## Open questions
 
-- How to represent composition without combinatorial blowup? (effect lattice? reachability over a primitive-effect graph?)
-- Where does this live: inside Purse, a companion monitor, or Purse Cloud?
-- What is the minimum viable version? Even a manual capability manifest plus invariant annotations beats nothing.
-- How to get a reliable capability inventory across runtimes (MCP servers, tool registries, dependency trees)?
+- How to enforce the process boundary in practice across runtimes: a separate process, a separate container, or a signing service the agent calls?
+- What is the minimal request interface, and how is every field validated broker-side?
+- How to attest, continuously, that the agent's process holds no credential reference?
 
 ## Provenance
 
-This direction came out of an open thread with [@runs.dash](https://www.threads.net/@runs.dash) on Threads, who pointed out that continuous verification is the real shape of the deployment contract, and that the dependency graph between capabilities and policy rules is the part worth scoping early.
+This design was worked out in the open with [@runs.dash](https://www.threads.net/@runs.dash) on Threads. The key move, that composition is dissolved by putting the credential below the agent's reach and making enforcement the process boundary rather than a policy check, is his.
