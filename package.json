@@ -12,8 +12,9 @@
   "scripts": {
     "build": "tsc",
     "demo": "tsx examples/demo-agent.ts",
-    "test": "tsx test/policy.test.ts && tsx test/evaluate.test.ts && tsx test/audit-explain.test.ts && tsx test/executor.test.ts && tsx test/grants.test.ts && tsx test/grants-reservation.test.ts && tsx test/broker.test.ts && tsx test/transport.test.ts && tsx test/transport-http.test.ts",
+    "test": "tsx test/policy.test.ts && tsx test/evaluate.test.ts && tsx test/audit-explain.test.ts && tsx test/executor.test.ts && tsx test/grants.test.ts && tsx test/grants-reservation.test.ts && tsx test/broker.test.ts && tsx test/transport.test.ts && tsx test/transport-http.test.ts && tsx test/x402-mock.test.ts && tsx test/x402-executor.test.ts && tsx test/x402-governed.test.ts",
     "demo:enforce": "tsx examples/enforce-demo/broker-host.ts",
+    "demo:x402": "tsx examples/x402/broker-host.ts",
     "mcp": "tsx src/mcp.ts"
   },
   "keywords": [
