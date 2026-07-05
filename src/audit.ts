@@ -5,7 +5,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, readFileSync, existsSync } from "node:fs";
-import type { AuditRecord, NormalizedRequest, DecisionStatus } from "./types";
+import type { AuditRecord, NormalizedRequest, DecisionStatus, AuditEvent, Explain } from "./types";
 
 const GENESIS = "0".repeat(64);
 
@@ -45,7 +45,7 @@ export class JsonlAuditStore implements AuditStore {
   }
 }
 
-/** Deterministic hash over every field except `hash` itself. */
+/** Deterministic hash over every field except `hash` itself. Undefined fields are omitted by JSON.stringify, so v0.1 records hash identically. */
 export function hashRecord(rec: Omit<AuditRecord, "hash">): string {
   const payload = JSON.stringify({
     id: rec.id,
@@ -54,26 +54,39 @@ export function hashRecord(rec: Omit<AuditRecord, "hash">): string {
     status: rec.status,
     reason: rec.reason,
     policyVersion: rec.policyVersion,
+    event: rec.event,
+    explain: rec.explain,
+    grantId: rec.grantId,
+    receipt: rec.receipt,
     prevHash: rec.prevHash,
   });
   return createHash("sha256").update(payload).digest("hex");
 }
 
+export interface RecordInput {
+  request: NormalizedRequest;
+  status: DecisionStatus;
+  reason: string;
+  policyVersion: string;
+  event?: AuditEvent;
+  explain?: Explain;
+  grantId?: string;
+  receipt?: { ok: boolean; ref?: string };
+}
+
 /** Build, hash, and append a record. Returns the finished record. */
-export function makeRecord(
-  store: AuditStore,
-  request: NormalizedRequest,
-  status: DecisionStatus,
-  reason: string,
-  policyVersion: string,
-): AuditRecord {
+export function makeRecord(store: AuditStore, input: RecordInput): AuditRecord {
   const base: Omit<AuditRecord, "hash"> = {
     id: randomUUID(),
     ts: new Date().toISOString(),
-    request,
-    status,
-    reason,
-    policyVersion,
+    request: input.request,
+    status: input.status,
+    reason: input.reason,
+    policyVersion: input.policyVersion,
+    event: input.event,
+    explain: input.explain,
+    grantId: input.grantId,
+    receipt: input.receipt,
     prevHash: store.lastHash(),
   };
   const rec: AuditRecord = { ...base, hash: hashRecord(base) };

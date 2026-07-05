@@ -51,6 +51,8 @@ export interface Decision {
   explain?: Explain;
 }
 
+export type AuditEvent = "decision" | "grant_minted" | "executed" | "execution_failed" | "grant_expired";
+
 /** One immutable, hash-chained entry in the audit log. */
 export interface AuditRecord {
   id: string;
@@ -60,6 +62,10 @@ export interface AuditRecord {
   reason: string;
   /** Short hash of the policy that produced this decision. */
   policyVersion: string;
+  event?: AuditEvent;
+  explain?: Explain;
+  grantId?: string;
+  receipt?: { ok: boolean; ref?: string };
   /** Hash of the previous record (or 64 zeros for the first record). */
   prevHash: string;
   /** SHA-256 over this record's fields plus prevHash. */

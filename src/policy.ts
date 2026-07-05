@@ -85,7 +85,10 @@ export class Purse {
       evaluated: { amount: req.amount, payee: req.payee, category: req.category },
       reservation,
     };
-    const rec = makeRecord(this.store, req, status, reason, this.policyVersion);
+    const rec = makeRecord(this.store, {
+      request: req, status, reason, policyVersion: this.policyVersion,
+      event: "decision", explain,
+    });
     return {
       status, reason, request: req, recordId: rec.id, explain,
       approvalId: status === "needs_approval" ? rec.id : undefined,
