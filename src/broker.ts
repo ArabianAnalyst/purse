@@ -142,7 +142,7 @@ export class Broker {
 
     if (!receipt.ok) {
       this.grants.markFailed(g.id);
-      const reason = receipt.error ?? "execution failed";
+      const reason = "execution failed";
       const scrubbed = scrubReceipt(receipt);
       makeRecord(this.store, { request: req, status: "denied", reason, policyVersion: this.policyVersion, event: "execution_failed", grantId: g.id, receipt: scrubbed });
       return { status: "rejected", reason, receipt: scrubbed };
