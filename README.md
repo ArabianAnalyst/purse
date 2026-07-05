@@ -5,11 +5,11 @@
 Purse is the enforcement point your agent's payments pass through. Route every spend through it: set limits, require human approval over a threshold, and get a tamper-evident log of every decision. Any agent, any payment rail, three lines of code, zero dependencies.
 
 ```bash
-npm i purse
+npm i @olurabian/purse
 ```
 
 ```ts
-import { Purse } from "purse";
+import { Purse } from "@olurabian/purse";
 
 const purse = new Purse({
   maxPerAction: "$5.00",

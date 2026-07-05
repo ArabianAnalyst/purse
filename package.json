@@ -1,6 +1,6 @@
 {
-  "name": "purse",
-  "version": "0.1.0",
+  "name": "@olurabian/purse",
+  "version": "0.2.0",
   "description": "A policy layer in front of your AI agent's payments. Set spending limits, require human approval over a threshold, and get a tamper-evident log of every decision. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",
@@ -23,6 +23,7 @@
     "spending", "mcp", "x402", "governance", "agentic", "fintech"
   ],
   "license": "MIT",
+  "publishConfig": { "access": "public" },
   "author": "Oluwasegun Araba (ARABA)",
   "repository": { "type": "git", "url": "https://github.com/ArabianAnalyst/purse" },
   "engines": { "node": ">=18" },
