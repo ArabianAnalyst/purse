@@ -250,6 +250,13 @@ A real agent loop whose **only** money path is `PurseClient → broker → x402 
 ### 11.3 What it proves (the drop)
 Even a compromised agent is confined to policy **by construction**, and every decision is explainably, cryptographically justified. Scene 2 (injection stopped) + Scene 5 (chain verifies with a readable "why") together are the shareable artifact — the proof that carries the build-in-public post.
 
+### 11.4 Resolved planning decisions (2026-07-05)
+The open x402 mechanics from earlier drafts are now settled for the Phase 2 plan:
+- **Settlement binding:** the executor probes the x402 resource for its 402 challenge and requires the **challenged amount to equal the grant amount exactly**, failing closed on any mismatch. This carries Phase 1's intent-binding all the way to the rail — the agent cannot be redirected to pay a different amount than was authorized.
+- **Test + demo rail:** built and run against a **local mock 402 resource + a mock signer** — deterministic, no wallet, no funds, no secrets, CI-safe — with the **real Base Sepolia (testnet USDC + facilitator) path documented** for a live run. The enforcement proof (injection blocked, chain verifies) holds regardless of rail; a live testnet settlement is a follow-up once a funded test wallet exists.
+- **Agent driver:** a **scripted, deterministic** agent walks the five scenes (reliable artifact + assertable in CI); an **optional real-LLM variant** (Anthropic via `fetch`, no SDK) runs behind the same `PurseClient` boundary, documented and manual, not part of `npm test`.
+- **Dependencies:** everything actually built/run adds **zero** dependencies (Node built-ins + global `fetch` + the Phase 1 core). `x402` / `x402-fetch` / `viem` are named as install-when-you-go for the documented testnet path only. All Phase 2 code lives under `examples/x402/` — never in the zero-dep `src/` core.
+
 **Still OUT even in Phase 2:** Stripe / Paystack adapters, bounded grants, continuous attestation, Cloud auth / UI (§10).
 
 ---
