@@ -9,18 +9,12 @@ import type {
   NormalizedRequest,
   Decision,
   DecisionStatus,
+  Explain,
+  ExplainRule,
 } from "./types";
-import { parseMoney, format, gt, add, assertSameCurrency, zero, type Money } from "./money";
+import { parseMoney, format, add, zero, type Money } from "./money";
+import { evaluate, type Ledger } from "./evaluate";
 import { JsonlAuditStore, makeRecord, verifyChain, type AuditStore } from "./audit";
-
-function globToRegExp(glob: string): RegExp {
-  const escaped = glob.replace(/[.+^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\?/g, ".");
-  return new RegExp(`^${escaped}$`, "i");
-}
-
-function matchesAny(value: string, globs: string[]): boolean {
-  return globs.some((g) => globToRegExp(g).test(value));
-}
 
 export interface PurseOptions extends PolicyConfig {
   /** Bring your own audit store. Defaults to an in-memory JSONL store. */
@@ -55,100 +49,19 @@ export class Purse {
     try {
       normalized = {
         amount: parseMoney(req.amount, this.currency),
-        payee: req.payee,
-        intent: req.intent,
-        category: req.category,
-        agentId: req.agentId,
+        payee: req.payee, intent: req.intent, category: req.category, agentId: req.agentId,
       };
     } catch (e) {
-      // Fail closed: if we cannot even read the request, deny it.
       const safe: NormalizedRequest = { amount: zero(this.currency), payee: String(req.payee ?? "?") };
-      return this.decide(safe, "denied", `denied: malformed request (${(e as Error).message})`);
+      return this.decide(safe, "denied", `denied: malformed request (${(e as Error).message})`, "malformed");
     }
-
     try {
-      return this.evaluate(normalized);
+      const ledger: Ledger = { spentSince: (s, c) => this.spentSince(s, c) };
+      const ev = evaluate(this.cfg, normalized, ledger, this.currency, Date.now());
+      return this.decide(normalized, ev.status, ev.reason, ev.rule, ev.reservation);
     } catch (e) {
-      // Fail closed: any error while evaluating policy denies the spend.
-      return this.decide(normalized, "denied", `denied: policy evaluation failed (${(e as Error).message})`);
+      return this.decide(normalized, "denied", `denied: policy evaluation failed (${(e as Error).message})`, "eval-error");
     }
-  }
-
-  private evaluate(req: NormalizedRequest): Decision {
-    const c = this.cfg;
-
-    // 1. Blocklist wins over everything.
-    if (c.deny && matchesAny(req.payee, c.deny)) {
-      return this.decide(req, "denied", `denied: payee "${req.payee}" is blocked`);
-    }
-
-    // 2. Allowlist: if present, the payee must be on it.
-    if (c.allow && c.allow.length > 0 && !matchesAny(req.payee, c.allow)) {
-      return this.decide(req, "denied", `denied: payee "${req.payee}" is not on the allowlist`);
-    }
-
-    // 3. Category restriction.
-    if (c.categories && c.categories.length > 0) {
-      if (!req.category || !c.categories.includes(req.category)) {
-        return this.decide(req, "denied", `denied: category "${req.category ?? "none"}" is not permitted`);
-      }
-    }
-
-    // 4. Per-action ceiling.
-    if (c.maxPerAction !== undefined) {
-      const cap = parseMoney(c.maxPerAction, this.currency);
-      assertSameCurrency(req.amount, cap);
-      if (gt(req.amount, cap)) {
-        return this.decide(req, "denied", `denied: ${format(req.amount)} exceeds the per-action cap of ${format(cap)}`);
-      }
-    }
-
-    // 5. Velocity ceilings (daily / custom window).
-    const velocity = this.checkVelocity(req);
-    if (velocity) return velocity;
-
-    // 6. Human-approval threshold.
-    if (c.requireApprovalOver !== undefined) {
-      const threshold = parseMoney(c.requireApprovalOver, this.currency);
-      assertSameCurrency(req.amount, threshold);
-      if (gt(req.amount, threshold)) {
-        return this.decide(
-          req,
-          "needs_approval",
-          `needs approval: ${format(req.amount)} is above the auto-approve threshold of ${format(threshold)}`,
-        );
-      }
-    }
-
-    // 7. Within policy.
-    return this.decide(req, "allowed", "within policy");
-  }
-
-  private checkVelocity(req: NormalizedRequest): Decision | null {
-    const windows: Array<{ cap: Money; windowMs: number; label: string }> = [];
-    if (this.cfg.maxPerDay !== undefined) {
-      windows.push({ cap: parseMoney(this.cfg.maxPerDay, this.currency), windowMs: 86_400_000, label: "daily" });
-    }
-    if (this.cfg.maxPerWindow !== undefined) {
-      windows.push({
-        cap: parseMoney(this.cfg.maxPerWindow.amount, this.currency),
-        windowMs: this.cfg.maxPerWindow.windowMs,
-        label: "window",
-      });
-    }
-
-    for (const w of windows) {
-      const spent = this.spentSince(Date.now() - w.windowMs, req.amount.currency);
-      const projected = add(spent, req.amount);
-      if (gt(projected, w.cap)) {
-        return this.decide(
-          req,
-          "denied",
-          `denied: would exceed the ${w.label} cap of ${format(w.cap)} (${format(spent)} already used)`,
-        );
-      }
-    }
-    return null;
   }
 
   /** Sum of previously ALLOWED spends since a timestamp, in one currency. */
@@ -163,13 +76,18 @@ export class Purse {
     return { amount: total, currency };
   }
 
-  private decide(req: NormalizedRequest, status: DecisionStatus, reason: string): Decision {
+  private decide(
+    req: NormalizedRequest, status: DecisionStatus, reason: string,
+    rule: ExplainRule, reservation?: Explain["reservation"],
+  ): Decision {
+    const explain: Explain = {
+      rule, policyVersion: this.policyVersion,
+      evaluated: { amount: req.amount, payee: req.payee, category: req.category },
+      reservation,
+    };
     const rec = makeRecord(this.store, req, status, reason, this.policyVersion);
     return {
-      status,
-      reason,
-      request: req,
-      recordId: rec.id,
+      status, reason, request: req, recordId: rec.id, explain,
       approvalId: status === "needs_approval" ? rec.id : undefined,
     };
   }

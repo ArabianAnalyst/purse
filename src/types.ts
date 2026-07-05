@@ -48,6 +48,7 @@ export interface Decision {
   recordId: string;
   /** Present only when status is "needs_approval". */
   approvalId?: string;
+  explain?: Explain;
 }
 
 /** One immutable, hash-chained entry in the audit log. */
@@ -63,4 +64,18 @@ export interface AuditRecord {
   prevHash: string;
   /** SHA-256 over this record's fields plus prevHash. */
   hash: string;
+}
+
+export type ExplainRule =
+  | "deny-list" | "allowlist-miss" | "category" | "per-action-cap"
+  | "velocity" | "require-approval" | "within-policy" | "malformed" | "eval-error";
+
+export interface Explain {
+  rule: ExplainRule;
+  policyVersion: string;
+  evaluated: { amount: Money; payee: string; category?: string };
+  reservation?: { used: Money; reserved: Money; cap: Money };
+  grant?: { id: string; boundTo: { payee: string; amount: Money; intent?: string }; origin: "policy" | "principal" };
+  approvedBy?: string;
+  receipt?: { ok: boolean; ref?: string };
 }
