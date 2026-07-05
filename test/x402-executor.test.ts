@@ -59,5 +59,23 @@ const signer = new MockSigner();
   await new Promise<void>((res) => plain.close(() => res()));
 }
 
+// unrecognized asset -> fail closed (default toMoney does not recognize it)
+{
+  const server = await startMock402({ amount: "500", asset: "WEIRD-TOKEN" });
+  const ex = new X402Executor({ resolvePayee: () => server.url, signer });
+  const r = await ex.execute({ id: "g5", payee: "acme.example", amount: parseMoney("$5.00", "USD") });
+  check("rejects a challenge in an unrecognized asset", r.ok === false);
+  await server.close();
+}
+
+// a throwing toMoney must not escape execute() (fail closed)
+{
+  const server = await startMock402({ amount: "500" });
+  const ex = new X402Executor({ resolvePayee: () => server.url, signer, toMoney: () => { throw new Error("boom"); } });
+  const r = await ex.execute({ id: "g6", payee: "acme.example", amount: parseMoney("$5.00", "USD") });
+  check("a throwing toMoney fails closed instead of throwing", r.ok === false);
+  await server.close();
+}
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

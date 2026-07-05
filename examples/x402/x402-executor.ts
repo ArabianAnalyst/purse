@@ -20,6 +20,11 @@ export interface X402ExecutorOptions {
 }
 
 function defaultToMoney(reqs: PaymentRequirements, currency: string): Money {
+  // The local mock speaks the grant's currency directly, tagged asset "USD-cents". Any other
+  // asset is unrecognized by this default mapping -> return a non-integer so the ceiling guard
+  // rejects (fail closed). A real deployment injects a toMoney that derives the currency from
+  // reqs.asset (e.g. USDC 6-decimals) and enforces the match itself.
+  if (reqs.asset !== "USD-cents") return { amount: Number.NaN, currency };
   return { amount: Number(reqs.maxAmountRequired), currency };
 }
 
@@ -46,10 +51,14 @@ export class X402Executor implements Executor {
 
     // 2. Intent-binding (grant as ceiling): the challenged amount MUST be <= the granted
     //    amount, same currency. The agent may pay UP TO what was authorized, never more.
-    const toMoney = this.opts.toMoney ?? defaultToMoney;
-    const challenged = toMoney(challenge, grant.amount.currency);
+    let challenged: Money;
+    try {
+      challenged = (this.opts.toMoney ?? defaultToMoney)(challenge, grant.amount.currency);
+    } catch (e) {
+      return { ok: false, error: `could not read the challenge amount: ${(e as Error).message}` };
+    }
     if (!Number.isInteger(challenged.amount) || challenged.amount < 0 || challenged.currency !== grant.amount.currency || challenged.amount > grant.amount.amount) {
-      return { ok: false, error: `402 amount (${challenge.maxAmountRequired} ${challenge.asset}) exceeds the grant ceiling (${grant.amount.amount} ${grant.amount.currency})` };
+      return { ok: false, error: `402 amount (${challenge.maxAmountRequired} ${challenge.asset}) does not satisfy the grant ceiling (${grant.amount.amount} ${grant.amount.currency})` };
     }
 
     // 3. Sign and settle.
