@@ -4,7 +4,7 @@
 
 **Goal:** Integrate a real x402 payment rail behind the Phase 1 broker and ship a two-process governed-agent demo that proves, end to end, that a compromised agent cannot move money outside policy — settling through x402 while the audit chain explainably verifies.
 
-**Architecture:** All Phase 2 code lives under `examples/x402/` and depends only on the Phase 1 interfaces (`Executor`, `Payable`, `Receipt`, `Broker`, `PurseClient`, `serveBroker`, `spawnAgent` from `src/index`). An `X402Executor implements Executor` performs the HTTP-402 dance: probe the resource for its 402 challenge, require the challenged amount to equal the grant amount **exactly** (intent-binding to the rail), then sign and settle. It is exercised against a **local mock 402 resource** + a **mock signer** — deterministic, no wallet, no funds, no secrets — with the real Base Sepolia path documented. The governed-agent demo runs the broker (holding the `X402Executor`) in the parent and a scripted agent (holding only `PurseClient`) in a spawned child, walking five proof scenes. An optional real-LLM variant runs behind the same boundary, manual and not in CI.
+**Architecture:** All Phase 2 code lives under `examples/x402/` and depends only on the Phase 1 interfaces (`Executor`, `Payable`, `Receipt`, `Broker`, `PurseClient`, `serveBroker`, `spawnAgent` from `src/index`). An `X402Executor implements Executor` performs the HTTP-402 dance: probe the resource for its 402 challenge, require the challenged amount to be **≤ the grant amount** (grant as ceiling — the agent may pay up to what was authorized, never more), then sign and settle the vendor's actual price. It is exercised against a **local mock 402 resource** + a **mock signer** — deterministic, no wallet, no funds, no secrets — with the real Base Sepolia path documented. The governed-agent demo runs the broker (holding the `X402Executor`) in the parent and a scripted agent (holding only `PurseClient`) in a spawned child, walking five proof scenes. An optional real-LLM variant runs behind the same boundary, manual and not in CI.
 
 **Tech Stack:** TypeScript (ES2022, ESM, `strict`, `noUncheckedIndexedAccess`), Node ≥18 built-ins only (`node:http`, `node:crypto`, `node:url`, `node:buffer`), global `fetch`, `tsx` to run. **Zero new dependencies** for everything built/run here. Tests are plain `check(name, cond)` scripts matching `test/policy.test.ts`.
 
@@ -12,7 +12,7 @@
 
 - **Zero new runtime dependencies.** Everything built here uses Node built-ins + global `fetch` + the Phase 1 `src/` core. `x402` / `x402-fetch` / `viem` are named ONLY in the documented testnet path (Task 4 README) — never imported by built/run code, never added to `package.json` dependencies.
 - **`src/` stays untouched and zero-dep.** All Phase 2 code lives under `examples/x402/`. Do not modify any `src/` file. (Tests may import from both `../src/index` and `../examples/x402/...`.)
-- **Intent-binding at the rail:** the executor MUST reject (fail closed) when the 402-challenged amount does not equal the grant amount exactly (same minor-unit integer AND same currency).
+- **Intent-binding at the rail (grant as ceiling):** the executor MUST reject (fail closed) when the 402-challenged amount **exceeds** the grant amount, or the currency differs, or the amount is not a non-negative integer. When the challenged amount is ≤ the grant, it settles the challenged amount and records it as `paidAmount` (the grant is the max authorized, not a fixed price).
 - **Fail closed everywhere:** unmapped payee, non-402 probe response, amount mismatch, non-200 settlement, any thrown error → `Receipt { ok: false, error }`, never `ok: true`. The executor never throws out of `execute()` — it returns a failed receipt (the broker treats a thrown executor as failure too, but the executor should not rely on that).
 - **Loopback only** for the mock 402 server: bind `127.0.0.1`.
 - **Money is integer minor units** via `src/money.ts` (`parseMoney`, `Money`). The mock speaks the grant's minor units directly (USD cents) with asset label `"USD-cents"`; the real USDC 6-decimal mapping is documented in Task 4, not built.
@@ -178,7 +178,7 @@ git commit -m "feat(x402): mock 402 resource server + mock signer + x402 types"
 
 ---
 
-### Task 2: `X402Executor` — HTTP-402 settlement with exact-amount intent-binding
+### Task 2: `X402Executor` — HTTP-402 settlement with ceiling intent-binding
 
 **Files:**
 - Create: `examples/x402/x402-executor.ts`
@@ -216,12 +216,22 @@ const signer = new MockSigner();
   await server.close();
 }
 
-// intent-binding: 402 amount != grant amount -> fail closed
+// grant as ceiling: 402 amount ABOVE the grant -> fail closed
 {
-  const server = await startMock402({ amount: "999" });
+  const server = await startMock402({ amount: "999" }); // vendor demands $9.99
   const ex = new X402Executor({ resolvePayee: () => server.url, signer });
   const r = await ex.execute({ id: "g2", payee: "acme.example", amount: parseMoney("$5.00", "USD") });
-  check("rejects when 402 amount != grant amount (intent-binding)", r.ok === false);
+  check("rejects when 402 amount exceeds the grant ceiling", r.ok === false);
+  await server.close();
+}
+
+// grant as ceiling: 402 amount BELOW the grant -> settles the vendor's actual price
+{
+  const server = await startMock402({ amount: "300" }); // vendor charges $3
+  const ex = new X402Executor({ resolvePayee: () => server.url, signer });
+  const r = await ex.execute({ id: "g2b", payee: "acme.example", amount: parseMoney("$5.00", "USD") }); // authorized up to $5
+  check("settles the vendor price when below the grant ceiling", r.ok === true);
+  check("paidAmount reflects the actual price, not the ceiling", r.paidAmount?.amount === 300);
   await server.close();
 }
 
@@ -257,8 +267,9 @@ Expected: FAIL — cannot find module `../examples/x402/x402-executor`.
 
 ```ts
 // x402-executor.ts — an Executor that settles a grant over the x402 protocol.
-// Flow: probe the resource for its 402 challenge, require the challenged amount to equal
-// the grant amount EXACTLY (intent-binding carried to the rail), then sign + settle.
+// Flow: probe the resource for its 402 challenge, require the challenged amount to be
+// <= the grant amount (grant as ceiling — the agent may pay up to what was authorized,
+// never more), then sign + settle the vendor's actual price.
 // Built and tested against the local mock; see examples/x402/README.md for the Base Sepolia path.
 import type { Executor, Payable, Receipt, Money } from "../../src/index";
 import type { PaymentRequirements, X402Signer } from "./types";
@@ -268,7 +279,7 @@ export interface X402ExecutorOptions {
   resolvePayee: (payee: string) => string | undefined;
   /** Produces the X-PAYMENT header for a challenge. Holds the wallet in a real deployment. */
   signer: X402Signer;
-  /** Convert the challenge's atomic amount to Purse Money for exact comparison.
+  /** Convert the challenge's atomic amount to Purse Money for the ceiling comparison.
    *  Default: treat `maxAmountRequired` as integer minor units in the grant's currency
    *  (true for the mock, where asset is "USD-cents"). Override for real USDC (6 decimals). */
   toMoney?: (reqs: PaymentRequirements, grantCurrency: string) => Money;
@@ -301,11 +312,12 @@ export class X402Executor implements Executor {
       return { ok: false, error: `challenge probe failed: ${(e as Error).message}` };
     }
 
-    // 2. Intent-binding: the challenged amount MUST equal the granted amount, exactly.
+    // 2. Intent-binding (grant as ceiling): the challenged amount MUST be <= the granted
+    //    amount, same currency. The agent may pay UP TO what was authorized, never more.
     const toMoney = this.opts.toMoney ?? defaultToMoney;
     const challenged = toMoney(challenge, grant.amount.currency);
-    if (!Number.isInteger(challenged.amount) || challenged.amount !== grant.amount.amount || challenged.currency !== grant.amount.currency) {
-      return { ok: false, error: `402 amount (${challenge.maxAmountRequired} ${challenge.asset}) does not match the grant (${grant.amount.amount} ${grant.amount.currency})` };
+    if (!Number.isInteger(challenged.amount) || challenged.amount < 0 || challenged.currency !== grant.amount.currency || challenged.amount > grant.amount.amount) {
+      return { ok: false, error: `402 amount (${challenge.maxAmountRequired} ${challenge.asset}) exceeds the grant ceiling (${grant.amount.amount} ${grant.amount.currency})` };
     }
 
     // 3. Sign and settle.
@@ -315,7 +327,7 @@ export class X402Executor implements Executor {
       if (res.status !== 200) return { ok: false, error: `settlement failed: HTTP ${res.status}` };
       const settle = (await res.json()) as { ref?: string };
       if (!settle.ref) return { ok: false, error: "settlement response carried no ref" };
-      return { ok: true, ref: settle.ref, paidAmount: grant.amount, raw: settle };
+      return { ok: true, ref: settle.ref, paidAmount: challenged, raw: settle };
     } catch (e) {
       return { ok: false, error: `settlement failed: ${(e as Error).message}` };
     }
@@ -326,7 +338,7 @@ export class X402Executor implements Executor {
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `npx tsx test/x402-executor.test.ts`
-Expected: PASS — `5 passed, 0 failed`.
+Expected: PASS — `6 passed, 0 failed`.
 
 - [ ] **Step 5: Commit**
 
@@ -350,12 +362,12 @@ git commit -m "feat(x402): X402Executor with exact-amount settlement binding"
 - Produces: a runnable two-process demo (`npm run demo:x402`) and a headless integration test asserting the five proof scenes.
 
 **Scene design (fixed amounts so budgets don't collide):**
-- Broker: `maxPerAction: "$150"`, `maxPerDay: "$100"`, `allow: ["acme.example", "premium.example"]`, `requireApprovalOver: "$50"`.
+- Broker: `maxPerAction: "$150"`, `maxPerDay: "$90"`, `allow: ["acme.example", "premium.example"]`, `requireApprovalOver: "$50"`.
 - Mock resources: `acme.example` priced `$3.00` (`"300"`), `premium.example` priced `$75.00` (`"7500"`).
-- Scene 1 normal: request `$3` → `acme.example` → allowed → execute → x402 settles.
-- Scene 2 injection: request `$10` → `attacker.evil` → denied (off allowlist).
-- Scene 3 over-threshold: request `$75` → `premium.example` → needs_approval → principal approves → execute → settles.
-- Scene 4 split: loop request `$3` → `acme.example` up to 20× (no execute) → reservation denies once the daily cap is reached.
+- Scene 1 normal: request `$3` → `acme.example` → allowed → execute → x402 settles. ($3 redeemed)
+- Scene 2 injection: request `$10` → `attacker.evil` → denied (off allowlist). (no budget)
+- Scene 3 over-threshold: request `$75` → `premium.example` → needs_approval → principal approves → execute → settles. ($75 redeemed; $78 of the $90 daily cap used)
+- Scene 4 split: loop request `$3` → `acme.example` 8× (no execute) → the first 4 reserve up to the $90 cap ($78 → $90), then the rest are denied by the reservation. Clean "4 reserved, then 4 blocked."
 - Scene 5 proof: `verify().ok === true` + the last executed `explain` (with the x402 ref).
 
 - [ ] **Step 1: Write the failing test** — `test/x402-governed.test.ts`
@@ -380,7 +392,7 @@ const resources: Record<string, string> = { "acme.example": acme.url, "premium.e
 
 const broker = new Broker({
   maxPerAction: "$150",
-  maxPerDay: "$100",
+  maxPerDay: "$90",
   allow: ["acme.example", "premium.example"],
   requireApprovalOver: "$50",
   executor: new X402Executor({ resolvePayee: (p) => resources[p], signer: new MockSigner() }),
@@ -463,7 +475,7 @@ const out: Record<string, unknown> = {};
 // Scene 4 — split-under-cap attack: many under-threshold requests, never executed.
 {
   let allowed = 0, denied = 0;
-  for (let i = 0; i < 20; i++) {
+  for (let i = 0; i < 8; i++) {
     const r = await purse.request({ amount: "$3", payee: "acme.example", intent: `loop ${i}` });
     if (r.decision === "allowed") allowed++; else denied++;
   }
@@ -491,7 +503,7 @@ const resources: Record<string, string> = { "acme.example": acme.url, "premium.e
 
 const broker = new Broker({
   maxPerAction: "$150",
-  maxPerDay: "$100",
+  maxPerDay: "$90",
   allow: ["acme.example", "premium.example"],
   requireApprovalOver: "$50",
   executor: new X402Executor({ resolvePayee: (p) => resources[p], signer: new MockSigner() }),
@@ -596,12 +608,17 @@ The demo proves, end to end:
 4. a split-under-cap burst is blocked by reservation-aware velocity;
 5. the tamper-evident audit chain verifies, and each settlement carries its x402 ref.
 
-## Intent-binding at the rail
+## Intent-binding at the rail (grant as ceiling)
 
-`X402Executor` probes the resource for its 402 challenge and **requires the challenged amount
-to equal the grant amount exactly** — same integer minor units, same currency — failing closed
-on any mismatch. This carries Purse's intent-binding all the way to settlement: a compromised
-agent cannot be redirected to pay a different amount than was authorized.
+In x402 the *resource* sets the price and the agent discovers/negotiates it at the rail, so the
+grant is the **maximum authorized**, not a fixed number. `X402Executor` probes the resource for
+its 402 challenge and **requires the challenged amount to be ≤ the grant amount** (same currency),
+failing closed if the vendor demands more than was authorized. It settles the vendor's actual price
+and records it as `paidAmount`. A compromised agent can pay *up to* what was authorized — never more.
+
+> Note: the tamper-evident audit currently records the authorized **ceiling** (the grant amount),
+> not the actual settled price — Phase 1's `scrubReceipt` keeps only `ok` + `ref`. Carrying the
+> settled `paidAmount` into the chain is a small core (`src/`) follow-up, out of this examples-only phase.
 
 ## Going live on Base Sepolia (testnet)
 
@@ -614,7 +631,7 @@ verification logic is exercised without a chain. To settle real testnet USDC:
 3. Point `resolvePayee` at your real x402 resource URLs and configure a facilitator.
 4. Provide a `toMoney` that converts USDC's **6-decimal** atomic units to your policy currency's
    minor units (e.g. `5_000_000` atomic USDC → `500` USD cents = divide by `10 ** 4`), keeping the
-   exact-match check intact.
+   ceiling check (challenged ≤ grant) intact.
 
 The private key and facilitator credentials live only in the broker process. The agent client is
 unchanged — it still only calls `request` / `execute` / `status`.
@@ -756,7 +773,7 @@ git commit -m "docs(x402): Phase 2 README (testnet mapping) + optional real-LLM 
 - §11.1 x402 Executor (implements `Executor`, credential broker-side) → Task 2. ✔
 - §11.2 governed-agent demo, five scenes over `PurseClient → broker → x402` → Task 3 (demo + headless test). ✔
 - §11.3 proof (injection stopped + chain verifies with explain) → Task 3 scenes 2 & 5. ✔
-- §11.4 resolved decisions: exact-amount binding (Task 2), local-mock + documented testnet (Tasks 1, 4), scripted + optional LLM (Tasks 3, 4), zero new deps (all tasks). ✔
+- §11.4 resolved decisions: **ceiling** binding (Task 2 — challenged ≤ grant, `paidAmount` = actual), local-mock + documented testnet (Tasks 1, 4), scripted + optional LLM (Tasks 3, 4), zero new deps (all tasks). ✔
 
 **2. Placeholder scan:** No `TBD`/`TODO`/"handle errors"/"similar to". Every code step shows complete code, including the optional LLM variant. ✔
 
@@ -764,4 +781,4 @@ git commit -m "docs(x402): Phase 2 README (testnet mapping) + optional real-LLM 
 
 **4. Environment note carried from Phase 1:** every child spawn resolves its path with `fileURLToPath(new URL(...))`, never `new URL(...).pathname` (the Windows path bug fixed in Phase 1 Task 7). Applied in Task 3 (test, broker-host) and Task 4 (broker-host-llm). ✔
 
-Out of this plan by design (tracked elsewhere): live Base Sepolia settlement (documented, needs a funded wallet); Stripe/Paystack adapters; the root-README HARNESS CARD prose (a Phase-1 doc follow-up); durable velocity ledger and audit `event`-taxonomy docs (Phase-1 final-review follow-ups).
+Out of this plan by design (tracked elsewhere): live Base Sepolia settlement (documented, needs a funded wallet); Stripe/Paystack adapters; the root-README HARNESS CARD prose (a Phase-1 doc follow-up); durable velocity ledger and audit `event`-taxonomy docs (Phase-1 final-review follow-ups); the audit recording the authorized **ceiling** rather than the actual settled `paidAmount` (`scrubReceipt` keeps `ok`+`ref`; carrying `paidAmount` into the chain is a small `src/` follow-up, since this phase is examples-only).
