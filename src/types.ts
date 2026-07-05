@@ -48,7 +48,10 @@ export interface Decision {
   recordId: string;
   /** Present only when status is "needs_approval". */
   approvalId?: string;
+  explain?: Explain;
 }
+
+export type AuditEvent = "decision" | "grant_minted" | "executed" | "execution_failed" | "grant_expired";
 
 /** One immutable, hash-chained entry in the audit log. */
 export interface AuditRecord {
@@ -59,8 +62,26 @@ export interface AuditRecord {
   reason: string;
   /** Short hash of the policy that produced this decision. */
   policyVersion: string;
+  event?: AuditEvent;
+  explain?: Explain;
+  grantId?: string;
+  receipt?: { ok: boolean; ref?: string };
   /** Hash of the previous record (or 64 zeros for the first record). */
   prevHash: string;
   /** SHA-256 over this record's fields plus prevHash. */
   hash: string;
+}
+
+export type ExplainRule =
+  | "deny-list" | "allowlist-miss" | "category" | "per-action-cap"
+  | "velocity" | "require-approval" | "within-policy" | "malformed" | "eval-error";
+
+export interface Explain {
+  rule: ExplainRule;
+  policyVersion: string;
+  evaluated: { amount: Money; payee: string; category?: string };
+  reservation?: { used: Money; reserved: Money; cap: Money };
+  grant?: { id: string; boundTo: { payee: string; amount: Money; intent?: string }; origin: "policy" | "principal" };
+  approvedBy?: string;
+  receipt?: { ok: boolean; ref?: string };
 }

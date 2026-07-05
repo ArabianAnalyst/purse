@@ -12,7 +12,8 @@
   "scripts": {
     "build": "tsc",
     "demo": "tsx examples/demo-agent.ts",
-    "test": "tsx test/policy.test.ts",
+    "test": "tsx test/policy.test.ts && tsx test/evaluate.test.ts && tsx test/audit-explain.test.ts && tsx test/executor.test.ts && tsx test/grants.test.ts && tsx test/grants-reservation.test.ts && tsx test/broker.test.ts && tsx test/transport.test.ts && tsx test/transport-http.test.ts",
+    "demo:enforce": "tsx examples/enforce-demo/broker-host.ts",
     "mcp": "tsx src/mcp.ts"
   },
   "keywords": [
