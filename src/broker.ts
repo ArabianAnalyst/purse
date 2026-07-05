@@ -120,8 +120,11 @@ export class Broker {
   async execute(grantId: string): Promise<ExecuteResult> {
     const claim = this.grants.claim(grantId);
     if (!claim.ok) {
-      const safe: NormalizedRequest = { amount: zero(this.currency), payee: "?" };
-      makeRecord(this.store, { request: safe, status: "denied", reason: `rejected: ${claim.reason}`, policyVersion: this.policyVersion, event: "execution_failed" });
+      const existing = this.grants.get(grantId);
+      const safe: NormalizedRequest = existing
+        ? { amount: existing.amount, payee: existing.payee, intent: existing.intent, category: existing.category }
+        : { amount: zero(this.currency), payee: "?" };
+      makeRecord(this.store, { request: safe, status: "denied", reason: `rejected: ${claim.reason}`, policyVersion: this.policyVersion, event: "execution_failed", grantId: grantId });
       return { status: "rejected", reason: claim.reason };
     }
     const g = claim.grant;
@@ -132,7 +135,7 @@ export class Broker {
       receipt = await this.executor.execute({ id: g.id, payee: g.payee, amount: g.amount });
     } catch (e) {
       this.grants.markFailed(g.id);
-      const reason = `executor error: ${(e as Error).message}`;
+      const reason = "executor error";
       makeRecord(this.store, { request: req, status: "denied", reason, policyVersion: this.policyVersion, event: "execution_failed", grantId: g.id });
       return { status: "rejected", reason };
     }
