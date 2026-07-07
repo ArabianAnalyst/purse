@@ -27,4 +27,4 @@ export { GrantStore } from "./grants";
 export type { Grant, GrantState, GrantOrigin } from "./grants";
 export { evaluate } from "./evaluate";
 export type { Ledger, EvaluationResult } from "./evaluate";
-export type { Explain, ExplainRule, AuditEvent } from "./types";
+export type { Explain, ExplainRule, AuditEvent, ScrubbedReceipt } from "./types";

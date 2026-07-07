@@ -1,7 +1,7 @@
 // broker.ts — the enforcement core. Holds the executor (credential). The agent can only
 // reach request/execute/status; approve/deny/pending are the principal (out-of-band) API.
 import { createHash } from "node:crypto";
-import type { PolicyConfig, AuthorizeRequest, NormalizedRequest, DecisionStatus, Explain } from "./types";
+import type { PolicyConfig, AuthorizeRequest, NormalizedRequest, DecisionStatus, Explain, ScrubbedReceipt } from "./types";
 import { parseMoney, zero, type Money } from "./money";
 import { evaluate, type Ledger } from "./evaluate";
 import { GrantStore, type Grant } from "./grants";
@@ -25,7 +25,7 @@ export interface RequestResult {
 }
 export interface ExecuteResult {
   status: "paid" | "rejected";
-  receipt?: { ok: boolean; ref?: string };
+  receipt?: ScrubbedReceipt;
   reason: string;
 }
 export interface StatusResult { state: "pending" | "approved" | "denied" | "unknown"; grantId?: string }

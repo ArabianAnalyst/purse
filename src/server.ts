@@ -6,9 +6,13 @@ import type { Broker } from "./broker";
 import type { WireRequest, WireResponse } from "./transport/types";
 import type { AuthorizeRequest } from "./types";
 
-/** Spawn a TypeScript agent child with a Node IPC channel (zero extra deps; uses tsx as a loader). */
-export function spawnAgent(childPath: string): ChildProcess {
-  return spawn(process.execPath, ["--import", "tsx", childPath], {
+/**
+ * Spawn an agent child with a Node IPC channel. Runs the child with plain `node` by
+ * default, so a compiled `.js` agent works with no extra dependencies. To run a
+ * TypeScript child, pass a loader via `execArgv`, e.g. `{ execArgv: ["--import", "tsx"] }`.
+ */
+export function spawnAgent(childPath: string, opts: { execArgv?: string[] } = {}): ChildProcess {
+  return spawn(process.execPath, [...(opts.execArgv ?? []), childPath], {
     stdio: ["inherit", "inherit", "inherit", "ipc"],
   });
 }

@@ -5,7 +5,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, readFileSync, existsSync } from "node:fs";
-import type { AuditRecord, NormalizedRequest, DecisionStatus, AuditEvent, Explain } from "./types";
+import type { AuditRecord, NormalizedRequest, DecisionStatus, AuditEvent, Explain, ScrubbedReceipt } from "./types";
 
 const GENESIS = "0".repeat(64);
 
@@ -71,7 +71,7 @@ export interface RecordInput {
   event?: AuditEvent;
   explain?: Explain;
   grantId?: string;
-  receipt?: { ok: boolean; ref?: string };
+  receipt?: ScrubbedReceipt;
 }
 
 /** Build, hash, and append a record. Returns the finished record. */

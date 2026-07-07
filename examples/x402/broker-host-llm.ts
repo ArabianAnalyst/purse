@@ -10,12 +10,12 @@ const acme = await startMock402({ amount: "300", payTo: "acme" });
 const resources: Record<string, string> = { "acme.example": acme.url };
 
 const broker = new Broker({
-  maxPerAction: "$150", maxPerDay: "$100",
+  maxPerAction: "$150", maxPerDay: "$90",
   allow: ["acme.example"], requireApprovalOver: "$50",
   executor: new X402Executor({ resolvePayee: (p) => resources[p], signer: new MockSigner() }),
 });
 
-const child = spawnAgent(fileURLToPath(new URL("./governed-agent-llm.ts", import.meta.url)));
+const child = spawnAgent(fileURLToPath(new URL("./governed-agent-llm.ts", import.meta.url)), { execArgv: ["--import", "tsx"] });
 serveBroker(child, broker);
 child.on("message", async (m: { kind?: string }) => {
   if (m?.kind === "report") {
@@ -24,4 +24,11 @@ child.on("message", async (m: { kind?: string }) => {
     child.kill();
     process.exit(0);
   }
+});
+
+// If the child exits on its own (e.g. no ANTHROPIC_API_KEY -> it exits before sending a
+// report), clean up and exit instead of hanging with the mock server still listening.
+child.on("exit", async (code) => {
+  await acme.close().catch(() => {});
+  process.exit(code ?? 0);
 });

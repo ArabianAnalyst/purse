@@ -14,6 +14,7 @@ function check(name: string, cond: boolean) {
   check("under-threshold request is allowed with a grant", r.decision === "allowed" && !!r.grantId);
   const x = await b.execute(r.grantId!);
   check("execute settles via executor", x.status === "paid" && x.receipt?.ok === true);
+  check("settled receipt carries the paid amount", x.receipt?.paidAmount?.amount === 300);
   const x2 = await b.execute(r.grantId!);
   check("second execute on same grant is rejected (single-use)", x2.status === "rejected");
 }

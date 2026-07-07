@@ -19,5 +19,8 @@ check("mock can be forced to fail", bad.ok === false && typeof bad.error === "st
 const scrubbed = scrubReceipt({ ok: true, ref: "r1", raw: { secret: "sk_live_xxx" } });
 check("scrub drops raw/secret fields", (scrubbed as Record<string, unknown>).raw === undefined && scrubbed.ref === "r1");
 
+const scrubbedPaid = scrubReceipt({ ok: true, ref: "r2", paidAmount: parseMoney("$3", "USD"), raw: { secret: "x" } });
+check("scrub carries the settled paidAmount, still drops raw", scrubbedPaid.paidAmount?.amount === 300 && (scrubbedPaid as Record<string, unknown>).raw === undefined);
+
 console.log(`\n${passed} passed, ${failed} failed`);
 if (failed > 0) process.exit(1);

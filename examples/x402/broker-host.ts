@@ -18,7 +18,7 @@ const broker = new Broker({
   executor: new X402Executor({ resolvePayee: (p) => resources[p], signer: new MockSigner() }),
 });
 
-const child = spawnAgent(fileURLToPath(new URL("./agent.ts", import.meta.url)));
+const child = spawnAgent(fileURLToPath(new URL("./agent.ts", import.meta.url)), { execArgv: ["--import", "tsx"] });
 serveBroker(child, broker);
 
 child.on("message", async (m: { kind?: string; pendingId?: string }) => {

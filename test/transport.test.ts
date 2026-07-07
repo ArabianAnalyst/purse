@@ -11,7 +11,7 @@ function check(name: string, cond: boolean) {
 
 // The broker lives HERE (parent, holds the executor/credential).
 const broker = new Broker({ maxPerAction: "$5", allow: ["api.stripe.com"], requireApprovalOver: "$50", executor: new MockExecutor() });
-const child = spawnAgent(fileURLToPath(new URL("./fixtures/agent-child.ts", import.meta.url)));
+const child = spawnAgent(fileURLToPath(new URL("./fixtures/agent-child.ts", import.meta.url)), { execArgv: ["--import", "tsx"] });
 serveBroker(child, broker);
 
 // The child (agent) runs a scripted flow and reports its results back on a "report" message.

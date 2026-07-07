@@ -53,6 +53,14 @@ export interface Decision {
 
 export type AuditEvent = "decision" | "grant_minted" | "executed" | "execution_failed" | "grant_expired";
 
+/** What reaches the audit log / explain from a Receipt: ok + rail ref + the amount actually
+ *  settled. Never the raw rail payload, the error text, or a credential. */
+export interface ScrubbedReceipt {
+  ok: boolean;
+  ref?: string;
+  paidAmount?: Money;
+}
+
 /** One immutable, hash-chained entry in the audit log. */
 export interface AuditRecord {
   id: string;
@@ -65,7 +73,7 @@ export interface AuditRecord {
   event?: AuditEvent;
   explain?: Explain;
   grantId?: string;
-  receipt?: { ok: boolean; ref?: string };
+  receipt?: ScrubbedReceipt;
   /** Hash of the previous record (or 64 zeros for the first record). */
   prevHash: string;
   /** SHA-256 over this record's fields plus prevHash. */
@@ -83,5 +91,5 @@ export interface Explain {
   reservation?: { used: Money; reserved: Money; cap: Money };
   grant?: { id: string; boundTo: { payee: string; amount: Money; intent?: string }; origin: "policy" | "principal" };
   approvedBy?: string;
-  receipt?: { ok: boolean; ref?: string };
+  receipt?: ScrubbedReceipt;
 }

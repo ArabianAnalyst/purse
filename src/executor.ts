@@ -1,6 +1,7 @@
 // executor.ts — the credential-holding execution layer. Constructed INSIDE the broker
 // process; the agent never holds a reference to it. Core ships only MockExecutor.
 import type { Money } from "./money";
+import type { ScrubbedReceipt } from "./types";
 
 export interface Receipt {
   ok: boolean;
@@ -30,7 +31,8 @@ export class MockExecutor implements Executor {
   }
 }
 
-/** Only ok + ref reach the audit log / explain. Never the raw payload or a credential. */
-export function scrubReceipt(r: Receipt): { ok: boolean; ref?: string } {
-  return { ok: r.ok, ref: r.ref };
+/** ok + rail ref + the amount actually settled reach the audit log. Never the raw payload,
+ *  the error text, or a credential. */
+export function scrubReceipt(r: Receipt): ScrubbedReceipt {
+  return { ok: r.ok, ref: r.ref, paidAmount: r.paidAmount };
 }

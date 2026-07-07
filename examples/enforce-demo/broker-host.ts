@@ -15,7 +15,7 @@ const broker = new Broker({
   executor: new MockExecutor(),
 });
 
-const child = spawnAgent(fileURLToPath(new URL("./agent.ts", import.meta.url)));
+const child = spawnAgent(fileURLToPath(new URL("./agent.ts", import.meta.url)), { execArgv: ["--import", "tsx"] });
 serveBroker(child, broker);
 
 child.on("message", (m: { kind?: string; pendingId?: string }) => {
