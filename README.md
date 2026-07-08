@@ -131,6 +131,10 @@ If any of these is false, treat Purse as policy plus logging, not as a hard boun
 
 This threat model was sharpened in the open by [@runs.dash](https://www.threads.net/@runs.dash).
 
+## Audit your own setup
+
+Not sure where your agent stands? The [Agent Payment Security Audit](prompts/agent-payment-security-audit.md) is a self-serve prompt. It scores your setup against the deployment contract above and tells you, in money terms, where a compromised agent could still move funds. Anything you leave out comes back as Unknown, not a guess.
+
 ## Harness card
 
 An honest disclosure of what the enforcement deployment controls, in Control / Agency / Runtime terms.
