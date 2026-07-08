@@ -215,4 +215,4 @@ If you are taking an agent that spends money from a working demo to production a
 
 ## License
 
-MIT. Built by [Oluwasegun Araba](https://arabastack.com).
+MIT. Built by [Oluwasegun Araba](https://olurabian.com).
