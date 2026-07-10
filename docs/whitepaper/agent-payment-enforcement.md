@@ -105,7 +105,7 @@ What we can say from the work so far is the shape of any real answer. It must be
 
 That is where this field goes next. The payments layer is simply where it becomes measurable in money, which is why we work there.
 
-This sits inside a larger reframing. Drexler's comprehensive AI services model treats advanced capability as a set of bounded, task-specific services, with agents as one constrained class of product rather than a trusted mind you hand the keys to. Enforcement mode is that argument made concrete at the money layer. The agent is a service that can request a spend. It is not a mind that holds the wallet. And the confused deputy is what you find the moment you take the bounding seriously enough to put real money behind it.
+This sits inside a larger reframing. Drexler's comprehensive AI services model treats advanced capability as a set of bounded, task-specific services, with agents as one constrained class of product rather than a trusted mind you hand the keys to. Dignum and Dignum make the companion case from the governance side, that agentic autonomy has to be paired with explicit models of accountability and institutional structure rather than trusted to the agent's own reasoning. Enforcement mode is both arguments made concrete at the money layer. The agent is a service that can request a spend. It is not a mind that holds the wallet. And the confused deputy is what you find the moment you take the bounding seriously enough to put real money behind it.
 
 ## 7. Limitations
 
@@ -131,6 +131,7 @@ The threat model behind this paper was sharpened in the open, in particular by [
 
 - Hardy, N. "The Confused Deputy (or why capabilities might have been invented)." ACM SIGOPS Operating Systems Review, 22(4), 1988.
 - Drexler, K. E. "Reframing Superintelligence: Comprehensive AI Services as General Intelligence." Technical Report #2019-1, Future of Humanity Institute, University of Oxford, 2019. The comprehensive-AI-services frame this paper instantiates at the payments layer.
+- Dignum, V., and F. Dignum. "Agentifying Agentic AI." arXiv:2511.17332, 2025. The governance and accountability companion to the bounding argument, agentic autonomy paired with explicit institutional structure.
 - Purse, the enforcement layer this paper is grounded in. `npm i @olurabian/purse`, threat model and deployment contract in the project [README](../../README.md).
 - The Agent Payment Security Audit, the eight-dimension diagnostic. [prompts/agent-payment-security-audit.md](../../prompts/agent-payment-security-audit.md).
 - The x402 governed-agent proof, five scenes, asserted in CI. `npm run demo:x402`, live-path notes under `examples/x402/`.
