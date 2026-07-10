@@ -135,6 +135,10 @@ This threat model was sharpened in the open by [@runs.dash](https://www.threads.
 
 Not sure where your agent stands? The [Agent Payment Security Audit](prompts/agent-payment-security-audit.md) is a self-serve prompt. It scores your setup against the deployment contract above and tells you, in money terms, where a compromised agent could still move funds. Anything you leave out comes back as Unknown, not a guess.
 
+## The paper behind it
+
+The threat model and the confused-deputy argument are written up in full in the whitepaper, [Agent-Payment Enforcement and the Confused Deputy](docs/whitepaper/agent-payment-enforcement.md). It separates what enforcement closes (forgery) from the open problem it does not (misdirection, the in-policy but wrong request), and places the work in the comprehensive-AI-services frame.
+
 ## Harness card
 
 An honest disclosure of what the enforcement deployment controls, in Control / Agency / Runtime terms.
