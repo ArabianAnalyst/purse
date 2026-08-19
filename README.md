@@ -221,6 +221,14 @@ This library is the enforcement primitive, and it is genuinely useful on its own
 
 If you are taking an agent that spends money from a working demo to production and your risk or finance team needs approvals, a central audit, and reconciliation, that is what Purse Cloud is for.
 
+## The Deadlatch stack
+
+Purse is the **enforce** in Deadlatch, the open runtime governance stack for AI agents. Adopt one, or run all three.
+
+- **Purse**, enforce. Stop the action off-policy, at the moment it happens.
+- **[blackbox](https://github.com/ArabianAnalyst/blackbox)**, prove. A tamper-evident record of what happened, verifiable outside the tool.
+- **[Tripwire](https://github.com/ArabianAnalyst/tripwire)**, watch. Catch the silent wrong action before a customer does.
+
 ## License
 
 MIT. Built by [Oluwasegun Araba](https://olurabian.com).

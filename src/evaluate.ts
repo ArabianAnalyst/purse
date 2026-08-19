@@ -1,8 +1,8 @@
 // evaluate.ts — the pure policy engine, shared by Purse (advisory) and Broker (enforcement).
 // The caller injects a Ledger (how much has been spent/reserved) and the clock, so this
 // function is deterministic and side-effect free.
-import type { PolicyConfig, NormalizedRequest, DecisionStatus, ExplainRule } from "./types";
-import { parseMoney, format, gt, add, assertSameCurrency, type Money } from "./money";
+import type { PolicyConfig, NormalizedRequest, DecisionStatus, ExplainRule } from "./types.js";
+import { parseMoney, format, gt, add, assertSameCurrency, type Money } from "./money.js";
 
 export interface Ledger {
   spentSince(sinceMs: number, currency: string): Money;

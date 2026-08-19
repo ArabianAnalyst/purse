@@ -11,10 +11,10 @@ import type {
   DecisionStatus,
   Explain,
   ExplainRule,
-} from "./types";
-import { parseMoney, format, add, zero, type Money } from "./money";
-import { evaluate, type Ledger } from "./evaluate";
-import { JsonlAuditStore, makeRecord, verifyChain, type AuditStore } from "./audit";
+} from "./types.js";
+import { parseMoney, format, add, zero, type Money } from "./money.js";
+import { evaluate, type Ledger } from "./evaluate.js";
+import { JsonlAuditStore, makeRecord, verifyChain, type AuditStore } from "./audit.js";
 
 export interface PurseOptions extends PolicyConfig {
   /** Bring your own audit store. Defaults to an in-memory JSONL store. */

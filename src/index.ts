@@ -1,6 +1,6 @@
 // Purse — a policy layer in front of your AI agent's payments.
-export { Purse } from "./policy";
-export type { PurseOptions } from "./policy";
+export { Purse } from "./policy.js";
+export type { PurseOptions } from "./policy.js";
 
 export type {
   PolicyConfig,
@@ -9,22 +9,22 @@ export type {
   Decision,
   DecisionStatus,
   AuditRecord,
-} from "./types";
+} from "./types.js";
 
-export { parseMoney, format, decimalsFor, type Money } from "./money";
+export { parseMoney, format, decimalsFor, type Money } from "./money.js";
 
-export { verifyChain, JsonlAuditStore, type AuditStore, type VerifyResult } from "./audit";
+export { verifyChain, JsonlAuditStore, type AuditStore, type VerifyResult } from "./audit.js";
 
 // Enforcement mode (v0.2)
-export { Broker } from "./broker";
-export type { BrokerOptions, RequestResult, ExecuteResult, StatusResult, PendingView } from "./broker";
-export { PurseClient } from "./client";
-export { serveBroker, spawnAgent } from "./server";
-export { serveHttp, HttpPurseClient } from "./transport/http";
-export { MockExecutor, scrubReceipt } from "./executor";
-export type { Executor, Receipt, Payable } from "./executor";
-export { GrantStore } from "./grants";
-export type { Grant, GrantState, GrantOrigin } from "./grants";
-export { evaluate } from "./evaluate";
-export type { Ledger, EvaluationResult } from "./evaluate";
-export type { Explain, ExplainRule, AuditEvent, ScrubbedReceipt } from "./types";
+export { Broker } from "./broker.js";
+export type { BrokerOptions, RequestResult, ExecuteResult, StatusResult, PendingView } from "./broker.js";
+export { PurseClient } from "./client.js";
+export { serveBroker, spawnAgent } from "./server.js";
+export { serveHttp, HttpPurseClient } from "./transport/http.js";
+export { MockExecutor, scrubReceipt } from "./executor.js";
+export type { Executor, Receipt, Payable } from "./executor.js";
+export { GrantStore } from "./grants.js";
+export type { Grant, GrantState, GrantOrigin } from "./grants.js";
+export { evaluate } from "./evaluate.js";
+export type { Ledger, EvaluationResult } from "./evaluate.js";
+export type { Explain, ExplainRule, AuditEvent, ScrubbedReceipt } from "./types.js";

@@ -1,5 +1,5 @@
 // types.ts
-import type { Money } from "./money";
+import type { Money } from "./money.js";
 
 /** What the agent is allowed to do. Amounts may be strings ("$5.00") or Money objects. */
 export interface PolicyConfig {

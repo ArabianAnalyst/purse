@@ -2,9 +2,9 @@
 // Spawns the agent as a subordinate child and serves ONLY the agent-facing methods
 // (request/execute/status). approve/deny/pending are never exposed over this channel.
 import { spawn, type ChildProcess } from "node:child_process";
-import type { Broker } from "./broker";
-import type { WireRequest, WireResponse } from "./transport/types";
-import type { AuthorizeRequest } from "./types";
+import type { Broker } from "./broker.js";
+import type { WireRequest, WireResponse } from "./transport/types.js";
+import type { AuthorizeRequest } from "./types.js";
 
 /**
  * Spawn an agent child with a Node IPC channel. Runs the child with plain `node` by

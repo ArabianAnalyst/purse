@@ -1,7 +1,7 @@
 // executor.ts — the credential-holding execution layer. Constructed INSIDE the broker
 // process; the agent never holds a reference to it. Core ships only MockExecutor.
-import type { Money } from "./money";
-import type { ScrubbedReceipt } from "./types";
+import type { Money } from "./money.js";
+import type { ScrubbedReceipt } from "./types.js";
 
 export interface Receipt {
   ok: boolean;

@@ -5,7 +5,7 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, readFileSync, existsSync } from "node:fs";
-import type { AuditRecord, NormalizedRequest, DecisionStatus, AuditEvent, Explain, ScrubbedReceipt } from "./types";
+import type { AuditRecord, NormalizedRequest, DecisionStatus, AuditEvent, Explain, ScrubbedReceipt } from "./types.js";
 
 const GENESIS = "0".repeat(64);
 

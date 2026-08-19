@@ -1,9 +1,9 @@
 // client.ts — the ONLY thing the agent process imports. No executor, no credential.
 // Fail-closed: if the broker channel dies or errors, requests resolve to denied/rejected.
 import { randomUUID } from "node:crypto";
-import type { AuthorizeRequest } from "./types";
-import type { RequestResult, ExecuteResult, StatusResult } from "./broker";
-import type { AgentChannel, WireRequest, WireResponse } from "./transport/types";
+import type { AuthorizeRequest } from "./types.js";
+import type { RequestResult, ExecuteResult, StatusResult } from "./broker.js";
+import type { AgentChannel, WireRequest, WireResponse } from "./transport/types.js";
 
 export class PurseClient {
   private pending = new Map<string, (r: WireResponse) => void>();

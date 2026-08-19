@@ -1,8 +1,8 @@
 // http.ts — loopback HTTP transport. Binds 127.0.0.1 only. Same narrow interface as the
 // IPC transport; this is the seam a hosted broker (Purse Cloud) grows from. Zero deps (node:http).
 import { createServer, request as httpRequest, type IncomingMessage } from "node:http";
-import type { Broker, RequestResult, ExecuteResult, StatusResult } from "./../broker";
-import type { AuthorizeRequest } from "./../types";
+import type { Broker, RequestResult, ExecuteResult, StatusResult } from "./../broker.js";
+import type { AuthorizeRequest } from "./../types.js";
 
 function readJson(req: IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {

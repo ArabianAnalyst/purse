@@ -2,8 +2,8 @@
 // (payee + amount). claim() is atomic in single-threaded Node: it flips open->redeemed
 // with no await inside, so two concurrent execute() calls cannot both claim the same grant.
 import { randomUUID } from "node:crypto";
-import type { NormalizedRequest } from "./types";
-import type { Money } from "./money";
+import type { NormalizedRequest } from "./types.js";
+import type { Money } from "./money.js";
 
 export type GrantState = "open" | "redeemed" | "expired" | "failed";
 export type GrantOrigin = "policy" | "principal";

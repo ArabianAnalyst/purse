@@ -10,8 +10,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
-import { Purse } from "./policy";
-import { format } from "./money";
+import { Purse } from "./policy.js";
+import { format } from "./money.js";
 
 // Policy from environment so the server is config-only, no code edit required.
 const purse = new Purse({

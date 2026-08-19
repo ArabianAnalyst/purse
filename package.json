@@ -1,6 +1,6 @@
 {
   "name": "@olurabian/purse",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "A policy layer in front of your AI agent's payments. Set spending limits, require human approval over a threshold, and get a tamper-evident log of every decision. Zero dependencies.",
   "type": "module",
   "main": "./dist/index.js",
