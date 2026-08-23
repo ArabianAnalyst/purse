@@ -1,4 +1,15 @@
-# Purse
+<div align="center">
+  <img src="assets/logo.png" width="118" alt="Purse" />
+  <h1>Purse</h1>
+  <p><b>The enforcement point your AI agent's payments pass through.</b></p>
+  <p>
+    <a href="https://www.npmjs.com/package/@olurabian/purse"><img src="https://img.shields.io/npm/v/@olurabian/purse?style=for-the-badge&label=npm&color=37D07E" alt="npm version" /></a>
+    <img src="https://img.shields.io/badge/dependencies-zero-37D07E?style=for-the-badge" alt="zero dependencies" />
+    <img src="https://img.shields.io/npm/l/@olurabian/purse?style=for-the-badge&label=license&color=2E3742" alt="MIT license" />
+    <img src="https://img.shields.io/badge/types-included-1B34E0?style=for-the-badge" alt="TypeScript types included" />
+  </p>
+  <p><sub>Part of <a href="https://deadlatch.dev"><b>Deadlatch</b></a> &nbsp;·&nbsp; <b>enforce</b> &nbsp;·&nbsp; prove &nbsp;·&nbsp; watch</sub></p>
+</div>
 
 **Your AI agent can spend money. Right now, nothing stops it from spending the wrong amount, to the wrong place, on a loop, with no record.**
 
