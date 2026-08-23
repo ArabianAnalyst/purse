@@ -6,7 +6,7 @@
     <a href="https://www.npmjs.com/package/@olurabian/purse"><img src="https://img.shields.io/npm/v/@olurabian/purse?style=for-the-badge&label=npm&color=37D07E" alt="npm version" /></a>
     <img src="https://img.shields.io/badge/dependencies-zero-37D07E?style=for-the-badge" alt="zero dependencies" />
     <img src="https://img.shields.io/npm/l/@olurabian/purse?style=for-the-badge&label=license&color=2E3742" alt="MIT license" />
-    <img src="https://img.shields.io/badge/types-included-1B34E0?style=for-the-badge" alt="TypeScript types included" />
+    <a href="https://github.com/ArabianAnalyst/purse/actions"><img src="https://img.shields.io/github/actions/workflow/status/ArabianAnalyst/purse/ci.yml?style=for-the-badge&label=build&branch=main" alt="build status" /></a>
   </p>
   <p><sub>Part of <a href="https://deadlatch.dev"><b>Deadlatch</b></a> &nbsp;·&nbsp; <b>enforce</b> &nbsp;·&nbsp; prove &nbsp;·&nbsp; watch</sub></p>
 </div>
