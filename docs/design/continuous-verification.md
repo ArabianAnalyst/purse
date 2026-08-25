@@ -68,7 +68,3 @@ Policy-level rules (caps, allowlists, categories) can still go stale when their 
 - How to attest, continuously, that the agent's process holds no credential reference?
 - Where does the principal's intent come from, and how is it captured without a human in every loop?
 - How tightly must an authorization be scoped before it becomes unusable: exact payee and amount, or a bounded set?
-
-## Provenance
-
-This design was worked out in the open with [@runs.dash](https://www.threads.net/@runs.dash) on Threads. The key move, that composition is dissolved by putting the credential below the agent's reach and making enforcement the process boundary rather than a policy check, is his. So is the follow-on: that capability isolation stops forgery but not misdirection, and that authorization must bind to a specific approved intent rather than to any in-policy value the agent supplies.

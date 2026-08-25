@@ -125,9 +125,7 @@ Two claims come out of this work. Forgery is closed by architecture, custody and
 
 Precision about that line is the contribution. The next contribution is whoever moves it.
 
-## Acknowledgments and references
-
-The threat model behind this paper was sharpened in the open, in particular by [@runs.dash](https://www.threads.net/@runs.dash).
+## References
 
 - Hardy, N. "The Confused Deputy (or why capabilities might have been invented)." ACM SIGOPS Operating Systems Review, 22(4), 1988.
 - Drexler, K. E. "Reframing Superintelligence: Comprehensive AI Services as General Intelligence." Technical Report #2019-1, Future of Humanity Institute, University of Oxford, 2019. The comprehensive-AI-services frame this paper instantiates at the payments layer.
