@@ -139,6 +139,7 @@ If any of these is false, treat Purse as policy plus logging, not as a hard boun
 **One honest limit.** Locking the key out of the agent stops *forgery*, the agent minting a payment it was never handed the means to make. It does not by itself stop *misdirection*, a compromised agent handing the broker a perfectly in-policy request that is not what you meant. Principal-approved grants bind to an intent a human actually saw, so misdirection is closed there. Auto-granted small spends are bounded by the caps and allowlist, not eliminated. This is the confused deputy at the payments layer, and it is where the roadmap goes next.
 
 **Status.** v0.2 ships enforcement mode. The broker holds the credential and performs the spend, the agent receives a scoped single-use grant, and every decision is a tamper-evident record with a structured reason. What remains on the roadmap is continuous capability-surface monitoring and the hosted layer, Purse Cloud. Until those land, the security property depends on the deployment contract above being met by the system around the broker.
+
 ## Audit your own setup
 
 Not sure where your agent stands? The [Agent Payment Security Audit](prompts/agent-payment-security-audit.md) is a self-serve prompt. It scores your setup against the deployment contract above and tells you, in money terms, where a compromised agent could still move funds. Anything you leave out comes back as Unknown, not a guess.
