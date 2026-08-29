@@ -1,7 +1,8 @@
 <div align="center">
   <img src="assets/logo.png" width="118" alt="Purse" />
   <h1>Purse</h1>
-  <p><b>The enforcement point your AI agent's payments pass through.</b></p>
+  <p><b>Scope limits what an agent can do. Purse binds what it was approved to do.</b></p>
+  <p><sub>Single-use grants for agent payments. The agent never holds the key.</sub></p>
   <p>
     <a href="https://www.npmjs.com/package/@olurabian/purse"><img src="https://img.shields.io/npm/v/@olurabian/purse?style=for-the-badge&label=npm&color=37D07E" alt="npm version" /></a>
     <img src="https://img.shields.io/badge/dependencies-zero-37D07E?style=for-the-badge" alt="zero dependencies" />
