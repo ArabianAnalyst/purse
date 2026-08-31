@@ -1,0 +1,49 @@
+# Purse credential-broker architecture
+# render:  d2 --theme 200 --pad 40 broker-architecture.d2 broker-architecture.svg
+direction: right
+
+style: {
+  fill: "#0a0c10"
+}
+
+classes: {
+  node: {
+    style: { fill: "#12161d"; stroke: "#2e3742"; font-color: "#e8edf3"; stroke-width: 1; border-radius: 10 }
+  }
+  enforce: {
+    style: { fill: "#0e1512"; stroke: "#37d07e"; font-color: "#e8edf3"; stroke-width: 2; border-radius: 14 }
+  }
+  store: {
+    style: { fill: "#171310"; stroke: "#f2b33d"; font-color: "#e8edf3"; stroke-width: 1 }
+  }
+}
+
+agent: AI agent {
+  class: node
+  proposes: "never holds the key" { class: node; style.font-color: "#8a94a2"; style.stroke: "#242b35" }
+}
+
+broker: Purse broker {
+  class: enforce
+  intent: intent binding {
+    class: node
+    style.font-color: "#37d07e"
+  }
+  policy: policy + velocity caps { class: node }
+  vault: credential vault {
+    class: store
+    shape: cylinder
+  }
+}
+
+rail: Payment rail { class: node }
+
+log: tamper-evident log {
+  class: store
+  shape: page
+}
+
+agent -> broker.intent: proposes a spend { style.stroke: "#7c8798" }
+broker.vault -> rail: key used on its behalf { style.stroke: "#37d07e" }
+broker.policy -> rail: allowed { style.stroke: "#37d07e" }
+broker -> log: writes every decision { style.stroke: "#f2b33d"; style.stroke-dash: 4 }
