@@ -16,6 +16,20 @@
 
 Purse is the enforcement point your agent's payments pass through. Route every spend through it. Set limits, require human approval over a threshold, and get a tamper-evident log of every decision. Any agent, any payment rail, three lines of code, zero dependencies.
 
+The path every spend takes:
+
+```mermaid
+flowchart LR
+    A[AI agent] -->|proposes a spend| P{Purse}
+    P -->|within policy| X[execute payment]
+    P -->|over threshold| H[hold for human]
+    P -->|off policy| D[deny]
+    P -. fail closed .-> D
+    X --> L[(tamper-evident log)]
+    H --> L
+    D --> L
+```
+
 ```bash
 npm i @olurabian/purse
 ```
