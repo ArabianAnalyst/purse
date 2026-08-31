@@ -40,6 +40,10 @@ Enforcement means the denied path does not exist. In Purse's enforcement mode, t
 
 Call this custody, not convention. The key lives in a different OS process, so "denied" is not a rule the agent chooses to follow. It is the absence of any other path. Convention says please do not spend this. Custody makes the spend impossible to perform.
 
+![The Purse broker holds the payment credential in a separate process the agent cannot reach. The agent proposes a spend, the broker binds it to an intent and checks policy, the key is used on the agent's behalf, and every decision is written to a tamper-evident log.](../diagrams/broker-architecture.svg)
+
+*Figure 1. Custody, not convention. The agent proposes a spend but never holds the key, which stays in the broker's vault and is used on its behalf.*
+
 Two principles hold the design together. Fail closed, meaning if the policy check cannot run, the spend is denied, never allowed. And single path, meaning the property only holds if the broker is the only way money can move. That second principle is a deployment contract, not a library feature, and section 8 returns to it honestly.
 
 The mechanics that sit behind the boundary are simple and load-bearing.
