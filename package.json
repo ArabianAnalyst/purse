@@ -53,6 +53,7 @@
     "node": ">=18"
   },
   "devDependencies": {
+    "@lavamoat/allow-scripts": "^5.1.0",
     "@types/node": "^20.19.43",
     "tsx": "^4.7.0",
     "typescript": "^5.4.0"
@@ -60,5 +61,10 @@
   "optionalDependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^3.23.0"
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "tsx>esbuild#0.28.1": true
+    }
   }
 }

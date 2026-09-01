@@ -14,5 +14,6 @@ jobs:
         with:
           node-version: 20
       - run: npm install --no-audit --no-fund
+      - run: npx allow-scripts # install scripts are off by default (.npmrc); run only allowlisted ones
       - run: npm run build
       - run: npm test
