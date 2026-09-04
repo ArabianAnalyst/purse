@@ -24,7 +24,8 @@
     "demo:enforce": "tsx examples/enforce-demo/broker-host.ts",
     "demo:x402": "tsx examples/x402/broker-host.ts",
     "demo:x402:llm": "tsx examples/x402/broker-host-llm.ts",
-    "mcp": "tsx src/mcp.ts"
+    "mcp": "tsx src/mcp.ts",
+    "samples": "node scripts/sample-receipts.mjs"
   },
   "keywords": [
     "ai",

@@ -1,0 +1,167 @@
+[
+  {
+    "id": "32d9ad7f-218b-440b-939e-8164234f2a81",
+    "ts": "2026-09-04T14:09:47.405Z",
+    "kind": "decision",
+    "payload": {
+      "request": {
+        "amount": {
+          "amount": 1200,
+          "currency": "USD"
+        },
+        "payee": "api.stripe.com",
+        "intent": "top up API credits",
+        "agentId": "agent-7"
+      },
+      "status": "allowed",
+      "reason": "within policy",
+      "policyVersion": "4c94d6cb4f21",
+      "event": "decision",
+      "explain": {
+        "rule": "within-policy",
+        "policyVersion": "4c94d6cb4f21",
+        "evaluated": {
+          "amount": {
+            "amount": 1200,
+            "currency": "USD"
+          },
+          "payee": "api.stripe.com"
+        }
+      }
+    },
+    "prevHash": "0000000000000000000000000000000000000000000000000000000000000000",
+    "hash": "7b3bc3e3e8f579ccb1d1c3ec3e91e2685c643c3133e13a19db8aa15a66074cde"
+  },
+  {
+    "id": "933d0f3b-5aed-4225-8913-c0a813d2337b",
+    "ts": "2026-09-04T14:09:47.406Z",
+    "kind": "decision",
+    "payload": {
+      "request": {
+        "amount": {
+          "amount": 420,
+          "currency": "USD"
+        },
+        "payee": "s3.aws.amazon.com",
+        "intent": "object storage",
+        "agentId": "agent-7"
+      },
+      "status": "allowed",
+      "reason": "within policy",
+      "policyVersion": "4c94d6cb4f21",
+      "event": "decision",
+      "explain": {
+        "rule": "within-policy",
+        "policyVersion": "4c94d6cb4f21",
+        "evaluated": {
+          "amount": {
+            "amount": 420,
+            "currency": "USD"
+          },
+          "payee": "s3.aws.amazon.com"
+        }
+      }
+    },
+    "prevHash": "7b3bc3e3e8f579ccb1d1c3ec3e91e2685c643c3133e13a19db8aa15a66074cde",
+    "hash": "cef2c8ec11e916738d1edb637789b301ebcd770680e4b453a1b9ad9f342a1fd7"
+  },
+  {
+    "id": "6591699b-aac9-4898-9d1e-a8520b86ccb7",
+    "ts": "2026-09-04T14:09:47.407Z",
+    "kind": "decision",
+    "payload": {
+      "request": {
+        "amount": {
+          "amount": 8000,
+          "currency": "USD"
+        },
+        "payee": "acme-supplies.example",
+        "intent": "reorder toner",
+        "agentId": "agent-7"
+      },
+      "status": "needs_approval",
+      "reason": "needs approval: 80.00 USD is above the auto-approve threshold of 50.00 USD",
+      "policyVersion": "4c94d6cb4f21",
+      "event": "decision",
+      "explain": {
+        "rule": "require-approval",
+        "policyVersion": "4c94d6cb4f21",
+        "evaluated": {
+          "amount": {
+            "amount": 8000,
+            "currency": "USD"
+          },
+          "payee": "acme-supplies.example"
+        }
+      }
+    },
+    "prevHash": "cef2c8ec11e916738d1edb637789b301ebcd770680e4b453a1b9ad9f342a1fd7",
+    "hash": "6c057488c6bc7bb6fb99a2551afb62d3645dbd913786aff2a5d0c18abddfcc19"
+  },
+  {
+    "id": "178ec2e2-8e74-4922-9196-570d80932d8e",
+    "ts": "2026-09-04T14:09:47.407Z",
+    "kind": "decision",
+    "payload": {
+      "request": {
+        "amount": {
+          "amount": 999,
+          "currency": "USD"
+        },
+        "payee": "sketchy.unknown-vendor.example",
+        "intent": "unknown",
+        "agentId": "agent-7"
+      },
+      "status": "denied",
+      "reason": "denied: payee \"sketchy.unknown-vendor.example\" is blocked",
+      "policyVersion": "4c94d6cb4f21",
+      "event": "decision",
+      "explain": {
+        "rule": "deny-list",
+        "policyVersion": "4c94d6cb4f21",
+        "evaluated": {
+          "amount": {
+            "amount": 999,
+            "currency": "USD"
+          },
+          "payee": "sketchy.unknown-vendor.example"
+        }
+      }
+    },
+    "prevHash": "6c057488c6bc7bb6fb99a2551afb62d3645dbd913786aff2a5d0c18abddfcc19",
+    "hash": "5867448fd0f18e8620344be083941ed5157e3fdf83c8293ee973229a68370f90"
+  },
+  {
+    "id": "4ef0b783-f22b-41b8-b834-3dd8a15a1be5",
+    "ts": "2026-09-04T14:09:47.407Z",
+    "kind": "decision",
+    "payload": {
+      "request": {
+        "amount": {
+          "amount": 25000,
+          "currency": "USD"
+        },
+        "payee": "api.stripe.com",
+        "intent": "large charge",
+        "agentId": "agent-7"
+      },
+      "status": "denied",
+      "reason": "denied: 250.00 USD exceeds the per-action cap of 100.00 USD",
+      "policyVersion": "4c94d6cb4f21",
+      "event": "decision",
+      "explain": {
+        "rule": "per-action-cap",
+        "policyVersion": "4c94d6cb4f21",
+        "evaluated": {
+          "amount": {
+            "amount": 25000,
+            "currency": "USD"
+          },
+          "payee": "api.stripe.com"
+        }
+      }
+    },
+    "prevHash": "5867448fd0f18e8620344be083941ed5157e3fdf83c8293ee973229a68370f90",
+    "hash": "904f1cd0bd8dd45815c599bbfe76d9222c9a8eec40fd3384698d1cf78cc42232"
+  }
+]
