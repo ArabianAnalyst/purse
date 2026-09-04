@@ -105,4 +105,10 @@ export class Purse {
   verify() {
     return verifyChain(this.store.all());
   }
+
+  /** Wait until the audit store has made every receipt durable. No-op on stores without flush(). */
+  async flush(): Promise<void> {
+    const s = this.store as unknown as { flush?: () => Promise<void> };
+    if (typeof s.flush === "function") await s.flush();
+  }
 }

@@ -117,7 +117,14 @@ export class Broker {
     return { decision: "allowed", grantId: grant.id, reason: ev.reason, explain };
   }
 
+  /** Redeem a grant. The decision is flushed before money moves, and the outcome before this resolves. */
   async execute(grantId: string): Promise<ExecuteResult> {
+    const result = await this.executeInner(grantId);
+    await this.flush();
+    return result;
+  }
+
+  private async executeInner(grantId: string): Promise<ExecuteResult> {
     const claim = this.grants.claim(grantId);
     if (!claim.ok) {
       const existing = this.grants.get(grantId);
@@ -129,6 +136,8 @@ export class Broker {
     }
     const g = claim.grant;
     const req: NormalizedRequest = { amount: g.amount, payee: g.payee, intent: g.intent, category: g.category };
+
+    await this.flush(); // the claim is recorded above; make it durable before the executor runs
 
     let receipt;
     try {
@@ -192,6 +201,12 @@ export class Broker {
 
   audit() { return this.store.all(); }
   verify() { return verifyChain(this.store.all()); }
+
+  /** Wait until the audit store has made every receipt durable. No-op on stores without flush(). */
+  async flush(): Promise<void> {
+    const s = this.store as unknown as { flush?: () => Promise<void> };
+    if (typeof s.flush === "function") await s.flush();
+  }
 
   private grantExplain(g: Grant): NonNullable<Explain["grant"]> {
     return { id: g.id, boundTo: { payee: g.payee, amount: g.amount, intent: g.intent }, origin: g.origin };

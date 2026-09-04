@@ -1,6 +1,6 @@
 {
   "name": "@olurabian/purse",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "A policy layer in front of your AI agent's payments. Set spending limits, require human approval over a threshold, and get a tamper-evident log of every decision. Zero third-party dependencies.",
   "type": "module",
   "main": "./dist/index.js",
@@ -20,7 +20,7 @@
     "build": "tsc",
     "demo": "tsx examples/demo-agent.ts",
     "demo:agentdojo": "tsx examples/agentdojo-injection/scenario.ts",
-    "test": "tsx test/policy.test.ts && tsx test/evaluate.test.ts && tsx test/audit-explain.test.ts && tsx test/audit-legacy.test.ts && tsx test/executor.test.ts && tsx test/grants.test.ts && tsx test/grants-reservation.test.ts && tsx test/broker.test.ts && tsx test/transport.test.ts && tsx test/transport-http.test.ts && tsx test/x402-mock.test.ts && tsx test/x402-executor.test.ts && tsx test/x402-governed.test.ts",
+    "test": "tsx test/policy.test.ts && tsx test/evaluate.test.ts && tsx test/audit-explain.test.ts && tsx test/audit-legacy.test.ts && tsx test/executor.test.ts && tsx test/grants.test.ts && tsx test/grants-reservation.test.ts && tsx test/broker.test.ts && tsx test/transport.test.ts && tsx test/transport-http.test.ts && tsx test/x402-mock.test.ts && tsx test/x402-executor.test.ts && tsx test/x402-governed.test.ts && tsx test/broker-flush.test.ts",
     "demo:enforce": "tsx examples/enforce-demo/broker-host.ts",
     "demo:x402": "tsx examples/x402/broker-host.ts",
     "demo:x402:llm": "tsx examples/x402/broker-host-llm.ts",

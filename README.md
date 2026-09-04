@@ -207,6 +207,21 @@ This is the difference between "we think the agent behaved" and "here is the cry
 
 Every decision is a [Deadlatch receipt](https://github.com/ArabianAnalyst/receipt), `{ id, ts, kind: "decision", payload, prevHash, hash }`. The decision fields (`request`, `status`, `reason`, `policyVersion`, `event`, `explain`, `grantId`, `receipt`) now live under `payload`, so a consumer reading `r.status` must now read `r.payload.status`. The chain is verified by [`@olurabian/receipt`](https://github.com/ArabianAnalyst/receipt), and any third party can recompute it with plain SHA-256 and nothing from you. Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for.
 
+## Production store
+
+Pass any store that implements the receipt `Store` interface. For Postgres use `PostgresStore` from `@olurabian/receipt`, which keeps the synchronous API and writes every decision through in order.
+
+```js
+import pg from "pg";
+import { PostgresStore } from "@olurabian/receipt";
+import { Broker, MockExecutor } from "@olurabian/purse";
+
+const store = await PostgresStore.open(new pg.Pool({ connectionString: process.env.DATABASE_URL }), { stream: "purse" });
+const broker = new Broker({ maxPerAction: "$50", allow: ["api.stripe.com"], executor: new MockExecutor(), store });
+```
+
+`execute()` waits for the store to make the decision durable before it calls the executor, and for the outcome before it resolves, so money never moves ahead of its receipt. `authorize()` stays synchronous, and its receipt is durable on the next turn of the event loop. Call `broker.flush()` or `purse.flush()` before shutting down.
+
 ## Upgrading from 0.2
 
 Audit files written by 0.2 use the flat shape. Decision fields sit at the top level, with no `kind` and no `payload`. 0.3 refuses to open them, and throws a clear error rather than silently misreading the file. Archive the old file and start a new one, or convert it by wrapping the flat fields into `payload` and re-chaining. Converting changes every hash.
