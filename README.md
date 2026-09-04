@@ -220,7 +220,7 @@ const store = await PostgresStore.open(new pg.Pool({ connectionString: process.e
 const broker = new Broker({ maxPerAction: "$50", allow: ["api.stripe.com"], executor: new MockExecutor(), store });
 ```
 
-`execute()` waits for the store to make the decision durable before it calls the executor, and for the outcome before it resolves, so money never moves ahead of its receipt. `authorize()` stays synchronous, and its receipt is durable on the next turn of the event loop. Call `broker.flush()` or `purse.flush()` before shutting down. If the store cannot make the decision durable, `execute()` throws, the grant is released, and no money moves.
+`execute()` waits for the store to make the decision durable before it calls the executor, and for the outcome before it resolves, so money never moves ahead of its receipt. `authorize()` stays synchronous. Its receipt is durable once the queued insert commits, which you can wait on with `purse.flush()`. If the process dies first, the receipts the store still counts as pending are lost. Call `broker.flush()` or `purse.flush()` before shutting down. If the store cannot make the decision durable before the executor runs, `execute()` throws, the grant is released, and no money moves. If the store fails after the executor ran, the payment happened and its outcome receipt is not durable. `execute()` still throws, the grant stays redeemed, and a retry is refused.
 
 ## Upgrading from 0.2
 
