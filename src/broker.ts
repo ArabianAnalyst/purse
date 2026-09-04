@@ -137,7 +137,12 @@ export class Broker {
     const g = claim.grant;
     const req: NormalizedRequest = { amount: g.amount, payee: g.payee, intent: g.intent, category: g.category };
 
-    await this.flush(); // the claim is recorded above; make it durable before the executor runs
+    try {
+      await this.flush(); // make the decision durable before the executor runs
+    } catch (e) {
+      this.grants.markFailed(g.id); // no money moved, so the grant must not count as spent
+      throw e;
+    }
 
     let receipt;
     try {

@@ -37,12 +37,15 @@ class LoggingExecutor extends MockExecutor {
 // Scene 2: a rejecting flush stops the executor from running and rejects execute
 {
   const log: string[] = [];
-  const b = new Broker({ maxPerAction: "$5", allow: ["api.stripe.com"], executor: new LoggingExecutor(log), store: new FlushingStore(log, true) });
+  const b = new Broker({ maxPerAction: "$5", maxPerDay: "$5", allow: ["api.stripe.com"], executor: new LoggingExecutor(log), store: new FlushingStore(log, true) });
   const r = b.request({ amount: "$3", payee: "api.stripe.com", intent: "credits" });
   let threw = "";
   try { await b.execute(r.grantId!); } catch (e) { threw = (e as Error).message; }
   check("execute rejects when the receipt cannot be made durable", /db down/.test(threw));
   check("the executor never ran", !log.includes("execute"));
+
+  const again = b.request({ amount: "$3", payee: "api.stripe.com", intent: "credits" });
+  check("the failed grant no longer counts against the day budget", again.decision === "allowed");
 }
 
 // Scene 3: stores without flush are fine, and Broker.flush()/Purse.flush() are no-ops on them
