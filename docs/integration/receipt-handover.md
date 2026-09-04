@@ -1,8 +1,8 @@
-# Purse → ARCS, receipt handover (spec v1)
+# Purse to an external hub, receipt handover (spec v1)
 
-The integration in one line. **Purse produces a hash-chained receipt for every decision. ARCS takes it as-is, verifies it independently, and binds it into the wider trail.** Purse's receipt is the source of truth. ARCS is the witness and aggregator above it, not the root of trust.
+The integration in one line. **Purse produces a hash-chained receipt for every decision. The hub takes it as-is, verifies it independently, and binds it into the wider trail.** Purse's receipt is the source of truth. The hub is the witness and aggregator above it, not the root of trust.
 
-A receipt verifies on its own, with nothing from Purse and nothing from ARCS. That property is the whole point, so keep it.
+A receipt verifies on its own, with nothing from Purse and nothing from the hub. That property is the whole point, so keep it.
 
 Ships with `samples/purse-sample-receipts.json`, five real receipts from a live Purse run (2 allowed, 1 needs_approval, 2 denied), regenerated with `npm run samples`. The chain verifies, and editing any field breaks it.
 
@@ -57,7 +57,7 @@ sha256(JSON.stringify({ id, ts, kind, payload, prevHash }))
 
 `payload` is serialized exactly as the producer wrote it (the parsed object's key order). In the chain, `prevHash` of the first receipt is 64 zeros. Each subsequent `prevHash` equals the previous receipt's `hash`. Alter a field and that receipt's `hash` no longer matches. Insert, drop, or reorder a receipt and the `prevHash` linkage breaks.
 
-Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. This is exactly the gap ARCS closes.
+Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. This is exactly the gap the hub closes.
 
 **You do not need to reimplement this.** The verifier is a zero-dependency package.
 
@@ -72,7 +72,7 @@ verifyChain(records);
 
 `brokenAt` is the array index of the first broken receipt, and `id` is that receipt's id.
 
-`@olurabian/purse` re-exports the same `verifyChain`. If ARCS prefers no dependency, reimplement the two checks above in any language; the only thing that must match byte for byte is the `JSON.stringify` key order.
+`@olurabian/purse` re-exports the same `verifyChain`. If the hub prefers no dependency, reimplement the two checks above in any language; the only thing that must match byte for byte is the `JSON.stringify` key order.
 
 `JSON.stringify` has exact conventions a reimplementation must match.
 
@@ -88,17 +88,17 @@ Python's default `json.dumps` differs on two of these.
 ## Division of labour
 
 - **Purse (enforcer)** decides and writes the receipt. The receipt is verifiable on its own.
-- **ARCS (hub)** ingests the receipt, verifies it independently, and anchors its `hash` into the wider KMS-signed trail so a set of receipts across tools becomes one cross-system record.
-- ARCS does **not** re-mint or replace the receipt. The enforcer that made the decision owns the proof.
+- **The hub** ingests the receipt, verifies it independently, and anchors its `hash` into the wider KMS-signed trail so a set of receipts across tools becomes one cross-system record.
+- The hub does **not** re-mint or replace the receipt. The enforcer that made the decision owns the proof.
 
-The trail should verify even if ARCS is offline. ARCS is the outside witness that makes a receipt evidence rather than one tool's word, it is not the thing you have to trust to believe the record.
+The trail should verify even if the hub is offline. The hub is the outside witness that makes a receipt evidence rather than one tool's word, it is not the thing you have to trust to believe the record.
 
 ---
 
 ## Two decisions to close
 
-1. **Signing.** Receipts are hash-chained, which is tamper-evident. If we want per-receipt provenance on top, Purse adds an `ed25519` signature over `hash` and hands ARCS the public key. Otherwise, ARCS's KMS signature provides provenance at the trail level, and that is the proposed v1 default, no per-receipt signing.
-2. **Transport.** v1 simplest, Purse exports a JSON or JSONL bundle (exactly like the sample) and ARCS ingests it. Or Purse POSTs each receipt to an ARCS endpoint as it is written. Agree the easy one first; the receipt shape is the same either way.
+1. **Signing.** Receipts are hash-chained, which is tamper-evident. If we want per-receipt provenance on top, Purse adds an `ed25519` signature over `hash` and hands the hub the public key. Otherwise, the hub's KMS signature provides provenance at the trail level, and that is the proposed v1 default, no per-receipt signing.
+2. **Transport.** v1 simplest, Purse exports a JSON or JSONL bundle (exactly like the sample) and the hub ingests it. Or Purse POSTs each receipt to a hub endpoint as it is written. Agree the easy one first; the receipt shape is the same either way.
 
 ---
 
