@@ -90,7 +90,7 @@ Multi-stage Dockerfile at `deploy/broker/Dockerfile` on `node:22-alpine`: instal
 
 ## G. Release
 
-Plan 1 publishes deadlatch-otel 0.2.0 then purse 0.4.0. Plan 2 pushes the app, tags `broker-v0.1.0`, CI pushes the image, and the definition of done is run locally against the published image (Docker Desktop required on this machine, not yet installed). A live Base Sepolia settlement needs a funded testnet wallet, provided by ARABA when ready; the conformance test covers the signature until then.
+Plan 1 publishes purse 0.4.0 then deadlatch-otel 0.2.0, whose dev dependency moves to purse 0.4 first. Plan 2 pushes the app, tags `broker-v0.1.0`, CI pushes the image, and the definition of done is run locally against the published image (Docker Desktop required on this machine, not yet installed). A live Base Sepolia settlement needs a funded testnet wallet, provided by ARABA when ready; the conformance test covers the signature until then.
 
 ## Non-goals
 

@@ -2,7 +2,7 @@
 
 ## 0.4.0 (2026-09-04)
 
-The x402 executor, its types, the mock signer, and the mock 402 server move from the examples into the package as the subpath `@olurabian/purse/x402`. `PaymentRequirements` gains `maxTimeoutSeconds` and `extra` (the EIP-712 domain name and version). `X402Signer.sign` receives the protocol version. No runtime dependencies added.
+The x402 executor, its types, the mock signer, and the mock 402 server move from the examples into the package as the subpath `@olurabian/purse/x402`. `PaymentRequirements` gains `maxTimeoutSeconds` and `extra` (the EIP-712 domain name and version). `X402Signer.sign` receives the protocol version. No runtime dependencies added. The executor reads the settlement proof from the `X-PAYMENT-RESPONSE` header, plain or base64 JSON, before falling back to a JSON body, so real x402 servers settle correctly.
 
 ## 0.3.1 (2026-09-04)
 

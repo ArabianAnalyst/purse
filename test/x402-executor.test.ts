@@ -9,6 +9,30 @@ function check(name: string, cond: boolean) {
 }
 const signer = new MockSigner();
 
+// a local 402 resource whose paid response is fully scripted, for the settlement-proof scenes below
+function startCustom402(paidResponse: { headers?: Record<string, string>; body?: string }): Promise<{ url: string; close(): Promise<void> }> {
+  const server = createServer((req, res) => {
+    const paid = typeof req.headers["x-payment"] === "string" && req.headers["x-payment"].length > 0;
+    if (!paid) {
+      res.writeHead(402, { "content-type": "application/json" });
+      res.end(JSON.stringify({
+        x402Version: 1,
+        accepts: [{ scheme: "exact", network: "mock", maxAmountRequired: "500", payTo: "acme", asset: "USD-cents", resource: req.url ?? "/" }],
+      }));
+      return;
+    }
+    res.writeHead(200, paidResponse.headers ?? {});
+    res.end(paidResponse.body ?? "");
+  });
+  return new Promise((resolve) => {
+    server.listen(0, "127.0.0.1", () => {
+      const addr = server.address();
+      const port = typeof addr === "object" && addr ? addr.port : 0;
+      resolve({ url: `http://127.0.0.1:${port}`, close: () => new Promise((res) => server.close(() => res())) });
+    });
+  });
+}
+
 // happy path: 402 amount matches the grant -> settles
 {
   const server = await startMock402({ amount: "500", payTo: "acme" }); // 500 cents
@@ -72,6 +96,27 @@ const signer = new MockSigner();
   const ex = new X402Executor({ resolvePayee: () => server.url, signer, toMoney: () => { throw new Error("boom"); } });
   const r = await ex.execute({ id: "g6", payee: "acme.example", amount: parseMoney("$5.00", "USD") });
   check("a throwing toMoney fails closed instead of throwing", r.ok === false);
+  await server.close();
+}
+
+// settlement proof: a base64-encoded X-PAYMENT-RESPONSE header wins over a non-JSON body
+{
+  const headerPayload = Buffer.from(JSON.stringify({
+    success: true, transaction: "0xabc123", network: "base-sepolia", payer: "0xpayer",
+  })).toString("base64");
+  const server = await startCustom402({ headers: { "x-payment-response": headerPayload }, body: "the paid content" });
+  const ex = new X402Executor({ resolvePayee: () => server.url, signer });
+  const r = await ex.execute({ id: "g7", payee: "acme.example", amount: parseMoney("$5.00", "USD") });
+  check("reads the settlement ref from a base64 X-PAYMENT-RESPONSE header over a non-JSON body", r.ok === true && r.ref === "0xabc123");
+  await server.close();
+}
+
+// settlement proof: a plain-JSON X-PAYMENT-RESPONSE header with an empty body
+{
+  const server = await startCustom402({ headers: { "x-payment-response": JSON.stringify({ ref: "r-1" }) }, body: "" });
+  const ex = new X402Executor({ resolvePayee: () => server.url, signer });
+  const r = await ex.execute({ id: "g8", payee: "acme.example", amount: parseMoney("$5.00", "USD") });
+  check("reads the settlement ref from a plain-JSON X-PAYMENT-RESPONSE header with an empty body", r.ok === true && r.ref === "r-1");
   await server.close();
 }
 

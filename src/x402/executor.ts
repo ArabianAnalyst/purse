@@ -7,6 +7,24 @@ import type { Executor, Payable, Receipt } from "../executor.js";
 import type { Money } from "../money.js";
 import type { PaymentRequirements, X402Signer } from "./types.js";
 
+/** Settlement proof: X-PAYMENT-RESPONSE (plain or base64 JSON, per x402 v1) first, then a JSON body with `ref`. */
+function settlementRef(headerValue: string | null, bodyText: string): string | undefined {
+  const tryParse = (s: string): Record<string, unknown> | undefined => {
+    try { const v = JSON.parse(s); return v && typeof v === "object" ? (v as Record<string, unknown>) : undefined; } catch { return undefined; }
+  };
+  const pick = (o: Record<string, unknown> | undefined): string | undefined => {
+    if (!o) return undefined;
+    for (const k of ["ref", "transaction", "txHash"]) { const v = o[k]; if (typeof v === "string" && v) return v; }
+    return undefined;
+  };
+  if (headerValue) {
+    const direct = pick(tryParse(headerValue));
+    if (direct) return direct;
+    try { const decoded = pick(tryParse(Buffer.from(headerValue, "base64").toString("utf8"))); if (decoded) return decoded; } catch { /* not base64 */ }
+  }
+  return pick(tryParse(bodyText));
+}
+
 export interface X402ExecutorOptions {
   /** Map a Purse payee (allowlisted vendor id) to the x402 resource URL. Return undefined to reject. */
   resolvePayee: (payee: string) => string | undefined;
@@ -69,9 +87,11 @@ export class X402Executor implements Executor {
       const header = await this.opts.signer.sign(challenge, { x402Version });
       const res = await this.f(url, { headers: { "X-PAYMENT": header } });
       if (res.status !== 200) return { ok: false, error: `settlement failed: HTTP ${res.status}` };
-      const settle = (await res.json()) as { ref?: string };
-      if (!settle.ref) return { ok: false, error: "settlement response carried no ref" };
-      return { ok: true, ref: settle.ref, paidAmount: challenged, raw: settle };
+      const headerValue = res.headers.get("x-payment-response");
+      const bodyText = await res.text();
+      const ref = settlementRef(headerValue, bodyText);
+      if (!ref) return { ok: false, error: "settlement response carried no ref" };
+      return { ok: true, ref, paidAmount: challenged, raw: { headerValue, bodyText } };
     } catch (e) {
       return { ok: false, error: `settlement failed: ${(e as Error).message}` };
     }
