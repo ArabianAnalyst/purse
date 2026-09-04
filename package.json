@@ -69,6 +69,6 @@
     }
   },
   "dependencies": {
-    "@olurabian/receipt": "file:../receipt"
+    "@olurabian/receipt": "^0.1.0"
   }
 }
