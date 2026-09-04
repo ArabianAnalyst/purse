@@ -5,7 +5,7 @@
   <p><sub>Single-use grants for agent payments. The agent never holds the key.</sub></p>
   <p>
     <a href="https://www.npmjs.com/package/@olurabian/purse"><img src="https://img.shields.io/npm/v/@olurabian/purse?style=for-the-badge&label=npm&color=37D07E" alt="npm version" /></a>
-    <img src="https://img.shields.io/badge/dependencies-zero-37D07E?style=for-the-badge" alt="zero dependencies" />
+    <img src="https://img.shields.io/badge/third--party%20deps-zero-37D07E?style=for-the-badge" alt="zero third-party dependencies" />
     <img src="https://img.shields.io/npm/l/@olurabian/purse?style=for-the-badge&label=license&color=2E3742" alt="MIT license" />
     <a href="https://github.com/ArabianAnalyst/purse/actions"><img src="https://img.shields.io/github/actions/workflow/status/ArabianAnalyst/purse/ci.yml?style=for-the-badge&label=build&branch=main" alt="build status" /></a>
   </p>
@@ -14,7 +14,7 @@
 
 **Your AI agent can spend money. Right now, nothing stops it from spending the wrong amount, to the wrong place, on a loop, with no record.**
 
-Purse is the enforcement point your agent's payments pass through. Route every spend through it. Set limits, require human approval over a threshold, and get a tamper-evident log of every decision. Any agent, any payment rail, three lines of code, zero dependencies.
+Purse is the enforcement point your agent's payments pass through. Route every spend through it. Set limits, require human approval over a threshold, and get a tamper-evident log of every decision. Any agent, any payment rail, three lines of code, zero third-party dependencies (the only dependency is @olurabian/receipt, the shared chain engine).
 
 The path every spend takes:
 

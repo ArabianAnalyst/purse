@@ -9,11 +9,12 @@ export type {
   Decision,
   DecisionStatus,
   AuditRecord,
+  DecisionPayload,
 } from "./types.js";
 
 export { parseMoney, format, decimalsFor, type Money } from "./money.js";
 
-export { verifyChain, JsonlAuditStore, type AuditStore, type VerifyResult } from "./audit.js";
+export { verifyChain, hashRecord, GENESIS, JsonlAuditStore, makeRecord, type AuditStore, type VerifyResult } from "./audit.js";
 
 // Enforcement mode (v0.2)
 export { Broker } from "./broker.js";

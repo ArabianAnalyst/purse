@@ -55,7 +55,7 @@ function check(name: string, cond: boolean) {
   const x = await b.execute(r.grantId!);
   check("executor failure yields rejected", x.status === "rejected");
   check("audit chain verifies across the lifecycle", b.verify().ok === true);
-  check("explain is present on decisions", b.audit()[0]!.explain?.rule === "within-policy");
+  check("explain is present on decisions", b.audit()[0]!.payload.explain?.rule === "within-policy");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

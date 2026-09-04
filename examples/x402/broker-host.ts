@@ -28,9 +28,9 @@ child.on("message", async (m: { kind?: string; pendingId?: string }) => {
     child.send({ kind: "approved", grantId });
   }
   if ((m as { kind?: string }).kind === "report") {
-    const executed = broker.audit().filter((r) => r.event === "executed");
+    const executed = broker.audit().filter((r) => r.payload.event === "executed");
     console.log(`\n  [proof] audit records: ${broker.audit().length}`);
-    console.log(`  [proof] x402 settlements: ${executed.length} (refs: ${executed.map((r) => r.receipt?.ref).join(", ")})`);
+    console.log(`  [proof] x402 settlements: ${executed.length} (refs: ${executed.map((r) => r.payload.receipt?.ref).join(", ")})`);
     console.log(`  [proof] tamper-evident chain intact: ${broker.verify().ok}`);
     await acme.close();
     await premium.close();

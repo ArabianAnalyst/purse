@@ -19,7 +19,7 @@ const child = spawnAgent(fileURLToPath(new URL("./governed-agent-llm.ts", import
 serveBroker(child, broker);
 child.on("message", async (m: { kind?: string }) => {
   if (m?.kind === "report") {
-    console.log(`\n  [proof] chain intact: ${broker.verify().ok}; settlements: ${broker.audit().filter((r) => r.event === "executed").length}`);
+    console.log(`\n  [proof] chain intact: ${broker.verify().ok}; settlements: ${broker.audit().filter((r) => r.payload.event === "executed").length}`);
     await acme.close();
     child.kill();
     process.exit(0);

@@ -63,7 +63,7 @@ check("KWD has three decimals", parseMoney("10 KWD").amount === 10000);
   check("clean chain verifies", p.verify().ok === true);
 
   const tampered = p.audit();
-  tampered[0]!.request.amount.amount = 999_999; // forge a record
+  tampered[0]!.payload.request.amount.amount = 999_999; // forge a record
   check("tampered chain is detected", verifyChain(tampered).ok === false);
 }
 

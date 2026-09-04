@@ -1,5 +1,6 @@
 // types.ts
 import type { Money } from "./money.js";
+import type { Receipt } from "@olurabian/receipt";
 
 /** What the agent is allowed to do. Amounts may be strings ("$5.00") or Money objects. */
 export interface PolicyConfig {
@@ -61,10 +62,8 @@ export interface ScrubbedReceipt {
   paidAmount?: Money;
 }
 
-/** One immutable, hash-chained entry in the audit log. */
-export interface AuditRecord {
-  id: string;
-  ts: string; // ISO-8601
+/** The payload of a Purse decision receipt, the `payload` of an @olurabian/receipt envelope. */
+export interface DecisionPayload {
   request: NormalizedRequest;
   status: DecisionStatus;
   reason: string;
@@ -74,11 +73,14 @@ export interface AuditRecord {
   explain?: Explain;
   grantId?: string;
   receipt?: ScrubbedReceipt;
-  /** Hash of the previous record (or 64 zeros for the first record). */
-  prevHash: string;
-  /** SHA-256 over this record's fields plus prevHash. */
-  hash: string;
 }
+
+/**
+ * One immutable, hash-chained entry in the audit log: a Deadlatch receipt of
+ * kind "decision". The decision fields live under `payload`; `prevHash` and
+ * `hash` are on the envelope.
+ */
+export type AuditRecord = Receipt<DecisionPayload>;
 
 export type ExplainRule =
   | "deny-list" | "allowlist-miss" | "category" | "per-action-cap"

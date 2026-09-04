@@ -68,10 +68,11 @@ export class Purse {
   private spentSince(sinceMs: number, currency: string): Money {
     let total = 0;
     for (const r of this.store.all()) {
-      if (r.status !== "allowed") continue;
-      if (r.request.amount.currency !== currency) continue;
+      const d = r.payload;
+      if (d.status !== "allowed") continue;
+      if (d.request.amount.currency !== currency) continue;
       if (new Date(r.ts).getTime() < sinceMs) continue;
-      total += r.request.amount.amount;
+      total += d.request.amount.amount;
     }
     return { amount: total, currency };
   }
