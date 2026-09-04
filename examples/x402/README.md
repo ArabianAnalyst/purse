@@ -35,7 +35,7 @@ and records it as `paidAmount`. A compromised agent can pay *up to* what was aut
 The mock speaks in USD cents (`asset: "USD-cents"`, integer minor units) so the executor's
 verification logic is exercised without a chain. To settle real testnet USDC:
 
-1. `npm i x402 x402-fetch viem` (these belong to the broker deployment, not the zero-dep core).
+1. The real signer lives in the broker image (see `deploy/README.md` once published); the executor and the mock are importable from `@olurabian/purse/x402`.
 2. Implement an `X402Signer` whose `sign()` produces a real EIP-3009 `transferWithAuthorization`
    from a funded Base Sepolia wallet (a `viem` account holding the test key — broker-side only).
 3. Point `resolvePayee` at your real x402 resource URLs and configure a facilitator.

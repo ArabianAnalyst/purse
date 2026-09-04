@@ -1,9 +1,7 @@
 // The principal's process: holds the Broker + the X402Executor (credential) + the resource map.
 // Spawns the agent as a subordinate child. Run: npm run demo:x402
 import { Broker, serveBroker, spawnAgent } from "../../src/index";
-import { X402Executor } from "./x402-executor";
-import { MockSigner } from "./mock-signer";
-import { startMock402 } from "./mock-402-server";
+import { X402Executor, MockSigner, startMock402 } from "../../src/x402/index.js";
 import { fileURLToPath } from "node:url";
 
 const acme = await startMock402({ amount: "300", payTo: "acme" });       // $3.00

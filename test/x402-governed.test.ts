@@ -1,7 +1,5 @@
 import { spawnAgent, serveBroker, Broker } from "../src/index";
-import { X402Executor } from "../examples/x402/x402-executor";
-import { MockSigner } from "../examples/x402/mock-signer";
-import { startMock402 } from "../examples/x402/mock-402-server";
+import { X402Executor, MockSigner, startMock402 } from "../src/x402/index.js";
 import { fileURLToPath } from "node:url";
 
 let passed = 0, failed = 0;

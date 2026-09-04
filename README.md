@@ -130,6 +130,8 @@ A two-process demo settles over the x402 payment rail while a scripted agent tri
 
 The demo settles over a local x402 mock, so you can run the whole thing with no wallet and no funds. It speaks the real x402 flow (HTTP 402, payment requirements, X-PAYMENT header). The live Base Sepolia path (USDC, EIP-3009 signing) is documented under `examples/x402/`.
 
+The executor and the mock are part of the package. `import { X402Executor, MockSigner, startMock402 } from "@olurabian/purse/x402"` brings in the protocol adapter with no extra dependencies. A wallet signer is not included here, it belongs in the broker deployment that holds the key.
+
 ## Threat model
 
 Purse is the policy and audit core of a payment control plane. It is a hard boundary only when it is the single path money can move. Deployed any other way, it is defense in depth, not a wall. This section is precise about which is which.

@@ -1,5 +1,4 @@
-import { startMock402 } from "../examples/x402/mock-402-server";
-import { MockSigner } from "../examples/x402/mock-signer";
+import { startMock402, MockSigner } from "../src/x402/index.js";
 
 let passed = 0, failed = 0;
 function check(name: string, cond: boolean) {

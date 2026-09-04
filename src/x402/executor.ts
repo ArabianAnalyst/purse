@@ -3,8 +3,9 @@
 // <= the grant amount (grant as ceiling — the agent may pay up to what was authorized,
 // never more), then sign + settle the vendor's actual price.
 // Built and tested against the local mock; see examples/x402/README.md for the Base Sepolia path.
-import type { Executor, Payable, Receipt, Money } from "../../src/index";
-import type { PaymentRequirements, X402Signer } from "./types";
+import type { Executor, Payable, Receipt } from "../executor.js";
+import type { Money } from "../money.js";
+import type { PaymentRequirements, X402Signer } from "./types.js";
 
 export interface X402ExecutorOptions {
   /** Map a Purse payee (allowlisted vendor id) to the x402 resource URL. Return undefined to reject. */
@@ -38,13 +39,15 @@ export class X402Executor implements Executor {
 
     // 1. Probe for the 402 challenge.
     let challenge: PaymentRequirements;
+    let x402Version: number;
     try {
       const res = await this.f(url);
       if (res.status !== 402) return { ok: false, error: `expected a 402 challenge, got ${res.status}` };
-      const body = (await res.json()) as { accepts?: PaymentRequirements[] };
+      const body = (await res.json()) as { x402Version?: number; accepts?: PaymentRequirements[] };
       const accept = body.accepts?.[0];
       if (!accept) return { ok: false, error: "402 challenge carried no payment requirements" };
       challenge = accept;
+      x402Version = body.x402Version ?? 1;
     } catch (e) {
       return { ok: false, error: `challenge probe failed: ${(e as Error).message}` };
     }
@@ -63,7 +66,7 @@ export class X402Executor implements Executor {
 
     // 3. Sign and settle.
     try {
-      const header = await this.opts.signer.sign(challenge);
+      const header = await this.opts.signer.sign(challenge, { x402Version });
       const res = await this.f(url, { headers: { "X-PAYMENT": header } });
       if (res.status !== 200) return { ok: false, error: `settlement failed: HTTP ${res.status}` };
       const settle = (await res.json()) as { ref?: string };

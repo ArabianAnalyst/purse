@@ -2,15 +2,17 @@
 // more fields; these are the ones the executor reads.
 export interface PaymentRequirements {
   scheme: string;            // "exact"
-  network: string;           // "base-sepolia" (real) or "mock"
+  network: string;           // "base-sepolia" | "base" (real) or "mock"
   maxAmountRequired: string; // atomic units of `asset`, as a string
   payTo: string;             // receiving address / vendor id
   asset: string;             // token contract address, or "USD-cents" in the mock
   resource: string;          // the resource URL being paid for
+  maxTimeoutSeconds?: number; // validity window for the authorization; the official client defaults to 60
+  extra?: { name?: string; version?: string }; // EIP-712 domain name and version of `asset`
 }
 
 // Given the challenge, produce the value for the X-PAYMENT header.
 // Mock: encodes the challenge. Real: signs an EIP-3009 authorization with a wallet.
 export interface X402Signer {
-  sign(reqs: PaymentRequirements): Promise<string>;
+  sign(reqs: PaymentRequirements, ctx: { x402Version: number }): Promise<string>;
 }

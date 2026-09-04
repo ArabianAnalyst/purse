@@ -1,7 +1,5 @@
 import { createServer } from "node:http";
-import { startMock402 } from "../examples/x402/mock-402-server";
-import { MockSigner } from "../examples/x402/mock-signer";
-import { X402Executor } from "../examples/x402/x402-executor";
+import { startMock402, MockSigner, X402Executor } from "../src/x402/index.js";
 import { parseMoney } from "../src/index";
 
 let passed = 0, failed = 0;
