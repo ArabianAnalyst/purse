@@ -194,7 +194,7 @@ The same policy config drives both `Purse` (advisory) and `Broker` (enforcement)
 
 ## The tamper-evident audit log
 
-Every decision writes an immutable record whose hash includes the previous record's hash. Alter, insert, or remove any record and the chain breaks. Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. You can *prove* the log was not edited after the fact.
+Every decision writes an immutable record whose hash includes the previous record's hash. Alter, insert, or remove any record and the chain breaks. The one edit it cannot see on its own is truncation at the tail, covered under The receipt below. You can *prove* the log was not edited after the fact.
 
 ```ts
 purse.verify();

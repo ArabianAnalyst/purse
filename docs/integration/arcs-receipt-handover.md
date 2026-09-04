@@ -57,7 +57,7 @@ sha256(JSON.stringify({ id, ts, kind, payload, prevHash }))
 
 `payload` is serialized exactly as the producer wrote it (the parsed object's key order). In the chain, `prevHash` of the first receipt is 64 zeros. Each subsequent `prevHash` equals the previous receipt's `hash`. Alter a field and that receipt's `hash` no longer matches. Insert, drop, or reorder a receipt and the `prevHash` linkage breaks.
 
-Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. This is exactly the gap ARCS closes by anchoring the chain head.
+Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. This is exactly the gap ARCS closes.
 
 **You do not need to reimplement this.** The verifier is a zero-dependency package.
 
