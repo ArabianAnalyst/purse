@@ -12,7 +12,7 @@ Ships with `samples/purse-sample-receipts.json`, five real receipts from a live 
 
 ## The receipt
 
-Every `authorize()` call writes one immutable receipt. Shape:
+Every `authorize()` call writes one immutable receipt. It takes this shape.
 
 ```jsonc
 {
@@ -40,7 +40,7 @@ Every `authorize()` call writes one immutable receipt. Shape:
 }
 ```
 
-Two notes that bite if missed:
+Two notes that bite if missed.
 
 - **Amounts are integer minor units plus a currency code.** `{ "amount": 8000, "currency": "USD" }` is $80.00. Use the currency's minor-unit exponent, do not divide by 100 blindly.
 - **Undefined fields are omitted.** Optional payload fields only appear when set. The hash is computed over what is present.
@@ -49,15 +49,15 @@ Two notes that bite if missed:
 
 ## Verifying a receipt (independently)
 
-The `hash` is SHA-256 over the envelope's fields in **this exact order**, with `hash` itself excluded:
+The `hash` is SHA-256 over the envelope's fields in **this exact order**, with `hash` itself excluded.
 
 ```js
 sha256(JSON.stringify({ id, ts, kind, payload, prevHash }))
 ```
 
-`payload` is serialized exactly as the producer wrote it (the parsed object's key order). The chain: `prevHash` of the first receipt is 64 zeros. Each subsequent `prevHash` equals the previous receipt's `hash`. Alter a field and that receipt's `hash` no longer matches. Insert, drop, or reorder a receipt and the `prevHash` linkage breaks.
+`payload` is serialized exactly as the producer wrote it (the parsed object's key order). In the chain, `prevHash` of the first receipt is 64 zeros. Each subsequent `prevHash` equals the previous receipt's `hash`. Alter a field and that receipt's `hash` no longer matches. Insert, drop, or reorder a receipt and the `prevHash` linkage breaks.
 
-**You do not need to reimplement this.** The verifier is a zero-dependency package:
+**You do not need to reimplement this.** The verifier is a zero-dependency package.
 
 ```js
 import { verifyChain } from "@olurabian/receipt"; // npm i @olurabian/receipt
@@ -84,13 +84,13 @@ The trail should verify even if ARCS is offline. ARCS is the outside witness tha
 
 ## Two decisions to close
 
-1. **Signing.** Receipts are hash-chained, which is tamper-evident. If we want per-receipt provenance on top, Purse adds an `ed25519` signature over `hash` and hands ARCS the public key. Otherwise ARCS's KMS signature provides provenance at the trail level. Proposed for v1: no per-receipt signing, KMS at the trail.
+1. **Signing.** Receipts are hash-chained, which is tamper-evident. If we want per-receipt provenance on top, Purse adds an `ed25519` signature over `hash` and hands ARCS the public key. Otherwise ARCS's KMS signature provides provenance at the trail level. Proposed for v1, no per-receipt signing, with KMS handling provenance at the trail.
 2. **Transport.** v1 simplest, Purse exports a JSON or JSONL bundle (exactly like the sample) and ARCS ingests it. Or Purse POSTs each receipt to an ARCS endpoint as it is written. Agree the easy one first; the receipt shape is the same either way.
 
 ---
 
 ## Files
 
-- `samples/purse-sample-receipts.json` — five real receipts, `verifyChain` returns `{ ok: true }`. Regenerate with `npm run samples`.
-- The envelope, canonicalization, and verifier: `@olurabian/receipt`, `src/hash.ts` and `src/chain.ts`.
-- Purse's decision payload type: `@olurabian/purse`, `src/types.ts` (`DecisionPayload`).
+- `samples/purse-sample-receipts.json` holds five real receipts. `verifyChain` returns `{ ok: true }`. Regenerate with `npm run samples`.
+- The envelope, canonicalization, and verifier live in `@olurabian/receipt`, `src/hash.ts` and `src/chain.ts`.
+- Purse's decision payload type lives in `@olurabian/purse`, `src/types.ts` (`DecisionPayload`).
