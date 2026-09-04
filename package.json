@@ -69,6 +69,6 @@
     }
   },
   "dependencies": {
-    "@olurabian/receipt": "^0.1.0"
+    "@olurabian/receipt": "^0.2.0"
   }
 }
