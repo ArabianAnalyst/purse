@@ -1,10 +1,10 @@
 // Generates docs/integration/samples/purse-sample-receipts.json by running the
 // real Purse policy engine. Run:  npm run samples   (after npm run build)
-import { pathToFileURL } from "node:url";
+import { pathToFileURL, fileURLToPath } from "node:url";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 
-const here = dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, "$1"));
+const here = dirname(fileURLToPath(import.meta.url));
 const mod = await import(pathToFileURL(resolve(here, "../dist/index.js")).href);
 const { Purse, verifyChain } = mod;
 

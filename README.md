@@ -194,14 +194,22 @@ The same policy config drives both `Purse` (advisory) and `Broker` (enforcement)
 
 ## The tamper-evident audit log
 
-Every decision writes an immutable record whose hash includes the previous record's hash. Alter, insert, or remove any record and the chain breaks. You can *prove* the log was not edited after the fact.
+Every decision writes an immutable record whose hash includes the previous record's hash. Alter, insert, or remove any record and the chain breaks. Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. You can *prove* the log was not edited after the fact.
 
 ```ts
 purse.verify();
-// { ok: true }  — or { ok: false, brokenAt, reason } if tampered
+// { ok: true }  — or { ok: false, brokenAt, id, reason } if tampered
 ```
 
 This is the difference between "we think the agent behaved" and "here is the cryptographically verifiable record of every spend it was authorized to make."
+
+## The receipt
+
+Every decision is a [Deadlatch receipt](https://github.com/ArabianAnalyst/receipt), `{ id, ts, kind: "decision", payload, prevHash, hash }`. The decision fields (`request`, `status`, `reason`, `policyVersion`, `event`, `explain`, `grantId`, `receipt`) now live under `payload`, so a consumer reading `r.status` must now read `r.payload.status`. The chain is verified by [`@olurabian/receipt`](https://github.com/ArabianAnalyst/receipt), and any third party can recompute it with plain SHA-256 and nothing from you. Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for.
+
+## Upgrading from 0.2
+
+Audit files written by 0.2 use the flat shape. Decision fields sit at the top level, with no `kind` and no `payload`. 0.3 refuses to open them, and throws a clear error rather than silently misreading the file. Archive the old file and start a new one, or convert it by wrapping the flat fields into `payload` and re-chaining. Converting changes every hash.
 
 ## Use it as an MCP server
 

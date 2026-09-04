@@ -57,18 +57,31 @@ sha256(JSON.stringify({ id, ts, kind, payload, prevHash }))
 
 `payload` is serialized exactly as the producer wrote it (the parsed object's key order). In the chain, `prevHash` of the first receipt is 64 zeros. Each subsequent `prevHash` equals the previous receipt's `hash`. Alter a field and that receipt's `hash` no longer matches. Insert, drop, or reorder a receipt and the `prevHash` linkage breaks.
 
+Truncation at the tail is the one edit a chain cannot detect on its own. That is what an outside witness anchoring the chain head is for. This is exactly the gap ARCS closes by anchoring the chain head.
+
 **You do not need to reimplement this.** The verifier is a zero-dependency package.
 
 ```js
 import { verifyChain } from "@olurabian/receipt"; // npm i @olurabian/receipt
 
-const records = JSON.parse(fs.readFileSync("purse-sample-receipts.json", "utf8"));
+const records = JSON.parse(fs.readFileSync("samples/purse-sample-receipts.json", "utf8"));
 verifyChain(records);
 // { ok: true }
 // on tamper: { ok: false, brokenAt: 0, id: "32d9ad7f-218b-440b-939e-8164234f2a81", reason: "hash mismatch (a record was altered)" }
 ```
 
+`brokenAt` is the array index of the first broken receipt, and `id` is that receipt's id.
+
 `@olurabian/purse` re-exports the same `verifyChain`. If ARCS prefers no dependency, reimplement the two checks above in any language; the only thing that must match byte for byte is the `JSON.stringify` key order.
+
+`JSON.stringify` has exact conventions a reimplementation must match.
+
+- No whitespace
+- UTF-8 output, non-ASCII characters left unescaped
+- Only control characters, quotes, backslashes, and lone surrogates escaped
+- JavaScript's key ordering, where integer-like keys sort first in numeric order
+
+Python's default `json.dumps` differs on two of these.
 
 ---
 
@@ -84,7 +97,7 @@ The trail should verify even if ARCS is offline. ARCS is the outside witness tha
 
 ## Two decisions to close
 
-1. **Signing.** Receipts are hash-chained, which is tamper-evident. If we want per-receipt provenance on top, Purse adds an `ed25519` signature over `hash` and hands ARCS the public key. Otherwise ARCS's KMS signature provides provenance at the trail level. Proposed for v1, no per-receipt signing, with KMS handling provenance at the trail.
+1. **Signing.** Receipts are hash-chained, which is tamper-evident. If we want per-receipt provenance on top, Purse adds an `ed25519` signature over `hash` and hands ARCS the public key. Otherwise, ARCS's KMS signature provides provenance at the trail level, and that is the proposed v1 default, no per-receipt signing.
 2. **Transport.** v1 simplest, Purse exports a JSON or JSONL bundle (exactly like the sample) and ARCS ingests it. Or Purse POSTs each receipt to an ARCS endpoint as it is written. Agree the easy one first; the receipt shape is the same either way.
 
 ---
