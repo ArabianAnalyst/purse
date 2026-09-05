@@ -1,6 +1,10 @@
 app = "purse-broker"
 primary_region = "lhr"
 
+# One broker per PURSE_STREAM. A rolling deploy would run two on the same stream and the database would refuse the fork.
+[deploy]
+  strategy = "immediate"
+
 [build]
   dockerfile = "Dockerfile"
 

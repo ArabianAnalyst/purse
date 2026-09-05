@@ -1,4 +1,4 @@
-import { Broker, verifyChain } from "@olurabian/purse";
+import { Broker, verifyChain, type Executor } from "@olurabian/purse";
 import { instrumentBroker } from "@olurabian/deadlatch-otel";
 import type { SqlClient } from "@olurabian/receipt";
 import type { X402Signer } from "@olurabian/purse/x402";
@@ -9,7 +9,9 @@ import { startOtel } from "./otel.js";
 import { createAgentServer, listen, type Listening } from "./agent-server.js";
 import { createAdminServer, type Readiness } from "./admin-server.js";
 
-export interface AppOverrides { sqlClient?: SqlClient; signer?: X402Signer }
+/** `executor` lets a test swap in an instrumented executor (a counting wrapper, for example)
+ *  where `signer` (x402 only) is not enough. Production always goes through buildExecutor. */
+export interface AppOverrides { sqlClient?: SqlClient; signer?: X402Signer; executor?: Executor }
 export interface App {
   broker: Broker; store: OpenedStore; signerAddress?: string;
   ready(): Readiness;
@@ -28,7 +30,10 @@ export async function createApp(cfg: Config, overrides: AppOverrides = {}): Prom
   }
   const boot = verifyChain(store.store.all());
   if (!boot.ok) throw new Error(`audit chain fails verification at index ${boot.brokenAt} (${boot.reason})`);
-  const { executor, signerAddress } = buildExecutor(cfg.executor, cfg.policy.currency, { signer: overrides.signer });
+  const { executor, signerAddress } = overrides.executor
+    ? { executor: overrides.executor, signerAddress: undefined }
+    : buildExecutor(cfg.executor, cfg.policy.currency, { signer: overrides.signer });
+  if (cfg.executor.kind === "x402") cfg.executor.privateKey = undefined;
   const { grantTtlMs, ...policy } = cfg.policy;
   const broker = instrumentBroker(new Broker({ ...policy, executor, store: store.store, ...(grantTtlMs ? { grantTtlMs } : {}) }), { store });
 

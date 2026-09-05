@@ -25,3 +25,8 @@ export function bearerMatches(header: string | undefined, token: string): boolea
 export function errorStatus(e: unknown): number {
   return /degraded/i.test((e as Error)?.message ?? "") ? 503 : 500;
 }
+
+/** The agent port never echoes raw store text back to the agent. The admin port keeps the raw message. */
+export function publicError(e: unknown): string {
+  return /degraded/i.test((e as Error)?.message ?? "") ? "store degraded; see the admin port readiness" : "internal error";
+}

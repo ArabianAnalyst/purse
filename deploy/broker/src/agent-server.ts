@@ -1,6 +1,6 @@
 import { createServer, type Server } from "node:http";
 import type { Broker, AuthorizeRequest } from "@olurabian/purse";
-import { readJson, send, errorStatus } from "./http.js";
+import { readJson, send, errorStatus, publicError } from "./http.js";
 import { handleMcp } from "./mcp.js";
 
 export interface Listening { server: Server; url: string; close(): Promise<void> }
@@ -24,7 +24,7 @@ export function createAgentServer(broker: Broker): Server {
         default: return send(res, 404, { error: "not found" });
       }
     } catch (e) {
-      if (!res.headersSent) send(res, errorStatus(e), { error: (e as Error).message });
+      if (!res.headersSent) send(res, errorStatus(e), { error: publicError(e) });
     }
   });
 }

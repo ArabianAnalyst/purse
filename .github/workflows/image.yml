@@ -1,4 +1,5 @@
 name: image
+# Path filters are not applied to tag pushes, so broker-v* tags always build and push.
 on:
   push:
     tags: ["broker-v*"]

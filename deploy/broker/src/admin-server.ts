@@ -21,8 +21,9 @@ export function createAdminServer(broker: Broker, store: OpenedStore, token: str
           }
           case "/audit": {
             const since = url.searchParams.get("since");
+            if (since && Number.isNaN(Date.parse(since))) return send(res, 400, { error: "since must be an ISO-8601 timestamp" });
             const all = broker.audit();
-            return send(res, 200, { receipts: since ? all.filter((r) => r.ts >= since) : all });
+            return send(res, 200, { receipts: since ? all.filter((r) => Date.parse(r.ts) >= Date.parse(since)) : all });
           }
           default: return send(res, 404, { error: "not found" });
         }

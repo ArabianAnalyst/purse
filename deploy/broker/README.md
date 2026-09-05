@@ -6,11 +6,30 @@ Purse enforcement mode as a container. An agent asks the broker for a spend, the
 
 You need Docker and a terminal. Grafana Cloud is optional and takes five extra minutes.
 
+0. Get the code, or just the image.
+
+```bash
+git clone https://github.com/ArabianAnalyst/purse.git && cd purse/deploy/broker
+```
+
+Only have the image? Point it at your own Postgres and skip straight to routing a spend.
+
+```bash
+docker run -e DATABASE_URL=... -e PURSE_ADMIN_TOKEN=... -e PURSE_MAX_PER_ACTION='$50' -e PURSE_ALLOW=api.stripe.com \
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.1.0
+```
+
 1. Start it.
 
 ```bash
 export PURSE_ADMIN_TOKEN=$(openssl rand -hex 24)
 docker compose up --build
+```
+
+Using PowerShell instead of bash? Generate the token this way.
+
+```powershell
+$env:PURSE_ADMIN_TOKEN = -join ((1..48) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
 ```
 
 The broker is up when it prints its two URLs. Postgres holds the receipts. The executor is the mock, which "pays" and returns a receipt, so no money moves.
@@ -22,7 +41,16 @@ curl -s localhost:8080/request -H 'content-type: application/json' \
   -d '{"amount":"$12.50","payee":"api.stripe.com","intent":"credits"}'
 ```
 
-You get a decision. When it is `allowed` it carries a single-use `grantId`. Redeem it.
+You get a decision. When it is `allowed` it carries a single-use `grantId`. Pull it straight out of the response instead of copying it by hand, with `jq` or with plain Node when `jq` is not installed.
+
+```bash
+curl -s localhost:8080/request -H 'content-type: application/json' \
+  -d '{"amount":"$12.50","payee":"api.stripe.com","intent":"credits"}' | jq -r .grantId
+curl -s localhost:8080/request -H 'content-type: application/json' \
+  -d '{"amount":"$12.50","payee":"api.stripe.com","intent":"credits"}' | node -pe 'JSON.parse(require("fs").readFileSync(0)).grantId'
+```
+
+The same trick pulls `pendingId` out of the held response in step 3, just swap the field name. Redeem the grant.
 
 ```bash
 curl -s localhost:8080/execute -H 'content-type: application/json' -d '{"grantId":"<grantId>"}'
@@ -39,6 +67,7 @@ curl -s localhost:8081/pending -H "authorization: Bearer $PURSE_ADMIN_TOKEN"
 curl -s localhost:8081/approve -H "authorization: Bearer $PURSE_ADMIN_TOKEN" \
   -H 'content-type: application/json' -d '{"pendingId":"<pendingId>"}'
 curl -s localhost:8080/status -H 'content-type: application/json' -d '{"pendingId":"<pendingId>"}'
+curl -s localhost:8080/execute -H 'content-type: application/json' -d '{"grantId":"<grantId>"}'
 ```
 
 The agent asked. It could not approve itself. The principal approved on a port the agent cannot reach.
@@ -49,11 +78,13 @@ The agent asked. It could not approve itself. The principal approved on a port t
 curl -s localhost:8081/verify -H "authorization: Bearer $PURSE_ADMIN_TOKEN"
 ```
 
-`ok` true means every receipt recomputes and every link holds. `pending` is how many receipts are queued but not yet committed, and `degraded` is null while the store is healthy. Verify independently with twenty lines of plain SHA-256, the recipe is in the receipt package README.
+`ok` true means every receipt recomputes and every link holds. `pending` is how many receipts are queued but not yet committed, and `degraded` is null while the store is healthy. Verify independently with twenty lines of plain SHA-256, the recipe is in the [receipt package](https://www.npmjs.com/package/@olurabian/receipt) README.
+
+`/readyz` on the admin port is the one an operator polls before routing traffic. `/healthz` on 8081 stays open without a token so the container health check can reach it even from inside the network the agent cannot see.
 
 5. See it in Grafana.
 
-Set the two OpenTelemetry variables for your Grafana Cloud stack and restart.
+Set the two OpenTelemetry variables for your Grafana Cloud stack and restart, in the same shell that still holds `PURSE_ADMIN_TOKEN`.
 
 ```bash
 export OTEL_EXPORTER_OTLP_ENDPOINT=https://otlp-gateway-<region>.grafana.net/otlp
@@ -83,6 +114,7 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `PURSE_MAX_PER_ACTION` | | Cap per spend, for example `$50`. |
 | `PURSE_MAX_PER_DAY` | | Rolling daily cap. Open grants reserve budget. |
 | `PURSE_REQUIRE_APPROVAL_OVER` | | Spends above this wait for the principal. |
+| `PURSE_ALLOW_OPEN_POLICY` | | Must be `1` to boot with no allowlist and no per-action cap. |
 | `PURSE_ALLOW` | | Comma-separated payee allowlist. |
 | `PURSE_DENY` | | Comma-separated payee denylist. |
 | `PURSE_GRANT_TTL_MS` | package default | How long an unredeemed grant lives. |
@@ -117,6 +149,12 @@ The enforcement property only holds under the deployment contract in the Purse t
 ## Known limits
 
 Single replica. Open grants and spends waiting for approval live in memory and do not survive a restart. The audit chain does. The whole receipt stream is loaded into memory at boot, so memory and start-up time grow with the stream. One wallet key per broker. If the process dies before a queued receipt commits, the receipts still counted as pending are lost, which a verifier cannot distinguish from a deliberate truncation, so anchor the chain head if that matters to you. Telemetry is off until an endpoint is set.
+
+The payment that latches the store has usually already settled by the time the broker reports the failure. The grant is consumed, the outcome receipt is in memory only, and the agent sees a 503.
+
+Run one broker per `PURSE_STREAM`. A second broker on the same stream is a fork, the database refuses it, and that broker stops. Deploy with replace, not rolling.
+
+Nothing caps the request body or the request rate; the stream grows with every request, so put your own gateway in front of the agent port.
 
 ## Reference deployment on Fly
 
