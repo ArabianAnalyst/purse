@@ -1,0 +1,48 @@
+{
+  "name": "purse-broker",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Purse enforcement mode as a container. Agent port with HTTP and MCP, token-protected admin port, Postgres receipts, telemetry on by default.",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc",
+    "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
+    "test": "tsx --test test/*.test.ts",
+    "start": "node dist/main.js"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@olurabian/deadlatch-otel": "^0.2.0",
+    "@olurabian/purse": "^0.4.0",
+    "@olurabian/receipt": "^0.2.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "^0.200.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
+    "@opentelemetry/sdk-metrics": "^2.0.0",
+    "@opentelemetry/sdk-node": "^0.200.0",
+    "pg": "^8.13.0",
+    "viem": "^2.21.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@lavamoat/allow-scripts": "^5.1.0",
+    "@types/node": "^22.10.0",
+    "@types/pg": "^8.11.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "x402": "^1.2.0"
+  },
+  "lavamoat": {
+    "allowScripts": {
+      "@opentelemetry/exporter-trace-otlp-http>@opentelemetry/otlp-transformer>protobufjs#7.6.6": false,
+      "tsx>esbuild#0.28.2": false,
+      "viem>ws>bufferutil#4.1.0": false,
+      "viem>ws>utf-8-validate#5.0.10": false,
+      "x402>wagmi>@wagmi/connectors>cbw-sdk>keccak#3.0.4": false
+    }
+  }
+}
