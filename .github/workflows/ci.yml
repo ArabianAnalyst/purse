@@ -17,3 +17,19 @@ jobs:
       - run: npx allow-scripts # install scripts are off by default (.npmrc); run only allowlisted ones
       - run: npm run build
       - run: npm test
+
+  broker:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: deploy/broker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npx allow-scripts
+      - run: npm run build
+      - run: npm run typecheck
+      - run: npm test

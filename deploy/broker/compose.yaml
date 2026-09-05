@@ -1,0 +1,30 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: purse
+      POSTGRES_PASSWORD: purse
+      POSTGRES_DB: purse
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U purse"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+  broker:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://purse:purse@postgres:5432/purse
+      PURSE_ADMIN_TOKEN: ${PURSE_ADMIN_TOKEN:?set PURSE_ADMIN_TOKEN to a random string of at least 24 characters}
+      PURSE_MAX_PER_ACTION: ${PURSE_MAX_PER_ACTION:-$$50}
+      PURSE_MAX_PER_DAY: ${PURSE_MAX_PER_DAY:-$$500}
+      PURSE_REQUIRE_APPROVAL_OVER: ${PURSE_REQUIRE_APPROVAL_OVER:-$$20}
+      PURSE_ALLOW: ${PURSE_ALLOW:-api.stripe.com}
+      PURSE_EXECUTOR: ${PURSE_EXECUTOR:-mock}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
