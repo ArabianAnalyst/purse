@@ -33,7 +33,7 @@ async function verifies(address: `0x${string}`, d: ReturnType<typeof decode>) {
 }
 
 test("matches the official x402 v1 client structurally and both signatures verify", async () => {
-  const signer = new EvmSigner(KEY);
+  const signer = new EvmSigner(KEY, { network: "base-sepolia" });
   const account = privateKeyToAccount(KEY);
   assert.equal(signer.address, account.address);
   const ours = decode(await signer.sign(reqs, { x402Version: 1 }));
@@ -52,7 +52,7 @@ test("matches the official x402 v1 client structurally and both signatures verif
 });
 
 test("validity window and nonce come from the injected clock and nonce", async () => {
-  const signer = new EvmSigner(KEY, () => 1_700_000_000, () => ("0x" + "ab".repeat(32)) as `0x${string}`);
+  const signer = new EvmSigner(KEY, { network: "base-sepolia", nowSeconds: () => 1_700_000_000, newNonce: () => ("0x" + "ab".repeat(32)) as `0x${string}` });
   const d = decode(await signer.sign(reqs, { x402Version: 1 }));
   assert.equal(d.payload.authorization.validAfter, String(1_700_000_000 - 600));
   assert.equal(d.payload.authorization.validBefore, String(1_700_000_000 + 300));
@@ -62,7 +62,17 @@ test("validity window and nonce come from the injected clock and nonce", async (
 });
 
 test("refuses a challenge without the EIP-712 domain or on an unknown network", async () => {
-  const signer = new EvmSigner(KEY);
+  const signer = new EvmSigner(KEY, { network: "base-sepolia" });
   await assert.rejects(signer.sign({ ...reqs, extra: undefined }, { x402Version: 1 }), /extra\.name and extra\.version/);
-  await assert.rejects(signer.sign({ ...reqs, network: "mock" }, { x402Version: 1 }), /unsupported network "mock"/);
+  // The chainId lookup is a defensive fallback: in production a signer is only ever configured
+  // for a network in CHAIN_IDS, so reaching it needs the signer's own configured network to be
+  // the unknown one too (the network-match check above would otherwise fire first).
+  const unconfigured = new EvmSigner(KEY, { network: "mock" });
+  await assert.rejects(unconfigured.sign({ ...reqs, network: "mock" }, { x402Version: 1 }), /unsupported network "mock"/);
+});
+
+test("refuses a challenge on another network or another scheme", async () => {
+  const signer = new EvmSigner(KEY, { network: "base-sepolia" });
+  await assert.rejects(signer.sign({ ...reqs, network: "base" }, { x402Version: 1 }), /configured for "base-sepolia"/);
+  await assert.rejects(signer.sign({ ...reqs, scheme: "upto" }, { x402Version: 1 }), /unsupported scheme/);
 });

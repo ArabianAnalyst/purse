@@ -10,7 +10,7 @@ export interface PolicyEnv {
 export type StoreConfig = { kind: "postgres"; url: string; stream: string } | { kind: "jsonl"; file: string };
 export type ExecutorConfig =
   | { kind: "mock" }
-  | { kind: "x402"; resources: Record<string, string>; signer: "mock" | "evm"; network: string; privateKey?: `0x${string}`; allowMainnet: boolean };
+  | { kind: "x402"; resources: Record<string, string>; signer: "mock" | "evm"; network: string; privateKey?: `0x${string}`; allowMainnet: boolean; asset?: `0x${string}` };
 export interface Config {
   policy: PolicyEnv; store: StoreConfig; ports: { agent: number; admin: number; bind: string };
   adminToken: string; executor: ExecutorConfig; maxPending: number; otel: boolean;
@@ -25,6 +25,7 @@ const int = (name: string, v: string | undefined, dflt: number): number => {
   return n;
 };
 const HEX_KEY = /^0x[0-9a-fA-F]{64}$/;
+const HEX_ADDRESS = /^0x[0-9a-fA-F]{40}$/;
 export const REAL_NETWORKS = new Set(["base-sepolia", "base"]);
 
 export function loadConfig(env: Env = process.env, readFile: (path: string) => string = (p) => readFileSync(p, "utf8")): Config {
@@ -83,7 +84,13 @@ export function loadConfig(env: Env = process.env, readFile: (path: string) => s
       if (!HEX_KEY.test(raw)) throw new ConfigError("the signer key must be 64 hex characters, optionally 0x-prefixed");
       privateKey = raw as `0x${string}`;
     }
-    executor = { kind: "x402", resources, signer, network, privateKey, allowMainnet };
+    let asset: `0x${string}` | undefined;
+    if (env.PURSE_X402_ASSET) {
+      if (!HEX_ADDRESS.test(env.PURSE_X402_ASSET)) throw new ConfigError("PURSE_X402_ASSET must be a 0x-prefixed 20-byte address");
+      if (network === "mock") throw new ConfigError("PURSE_X402_ASSET cannot be used with PURSE_X402_NETWORK=mock");
+      asset = env.PURSE_X402_ASSET as `0x${string}`;
+    }
+    executor = { kind: "x402", resources, signer, network, privateKey, allowMainnet, asset };
   } else if (kind !== "mock") {
     throw new ConfigError(`PURSE_EXECUTOR must be mock or x402, got "${kind}"`);
   }

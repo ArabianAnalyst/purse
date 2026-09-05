@@ -94,13 +94,14 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `PURSE_X402_PRIVATE_KEY` | | Wallet key, 64 hex characters. Prefer the file. |
 | `PURSE_X402_KEY_FILE` | | Path to a file holding the key. Wins over the variable. Never logged. |
 | `PURSE_X402_ALLOW_MAINNET` | | Must be `1` to run on `base`. |
+| `PURSE_X402_ASSET` | USDC for the network | Override the token contract the broker will pay in. Challenges naming any other asset, network, or scheme are refused. |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | | Telemetry starts only when set. Standard OpenTelemetry variables apply. |
 
 A wrong or missing value is a specific error at boot. The broker never falls back to a default that would hide a mistake.
 
 ## Settling real money over x402
 
-Set `PURSE_EXECUTOR=x402`, map payees to resource URLs, and give the broker a wallet key through a mounted file. On `base-sepolia` the broker signs an EIP-3009 authorization for the USDC named in the resource's 402 challenge, in the exact form the official x402 client produces, and sends it as the payment header. The signer's address is printed at boot so you can fund it. `base` is mainnet and needs `PURSE_X402_ALLOW_MAINNET=1`.
+Set `PURSE_EXECUTOR=x402`, map payees to resource URLs, and give the broker a wallet key through a mounted file. On `base-sepolia` the broker signs an EIP-3009 authorization only when the challenge names the configured network, the exact scheme, and the pinned USDC contract, and refuses anything else, in the exact form the official x402 client produces, and sends it as the payment header. The signer's address is printed at boot so you can fund it. `base` is mainnet and needs `PURSE_X402_ALLOW_MAINNET=1`.
 
 The key exists in the broker's process and nowhere else. Not in the agent. Not in a prompt. Not on the agent port.
 

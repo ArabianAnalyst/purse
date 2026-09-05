@@ -24,17 +24,24 @@ export const AUTH_TYPES = {
 export class EvmSigner implements X402Signer {
   readonly address: `0x${string}`;
   private readonly account: PrivateKeyAccount;
+  private readonly network: string;
+  private readonly nowSeconds: () => number;
+  private readonly newNonce: () => `0x${string}`;
 
   constructor(
     privateKey: `0x${string}`,
-    private readonly nowSeconds: () => number = () => Math.floor(Date.now() / 1000),
-    private readonly newNonce: () => `0x${string}` = () => toHex(randomBytes(32)),
+    opts: { network: string; nowSeconds?: () => number; newNonce?: () => `0x${string}` },
   ) {
     this.account = privateKeyToAccount(privateKey);
     this.address = this.account.address;
+    this.network = opts.network;
+    this.nowSeconds = opts.nowSeconds ?? (() => Math.floor(Date.now() / 1000));
+    this.newNonce = opts.newNonce ?? (() => toHex(randomBytes(32)));
   }
 
   async sign(reqs: PaymentRequirements, ctx: { x402Version: number }): Promise<string> {
+    if (reqs.scheme !== "exact") throw new Error(`EvmSigner: unsupported scheme "${reqs.scheme}"`);
+    if (reqs.network !== this.network) throw new Error(`EvmSigner: challenge is for network "${reqs.network}" but this signer is configured for "${this.network}"`);
     const chainId = CHAIN_IDS[reqs.network];
     if (!chainId) throw new Error(`EvmSigner: unsupported network "${reqs.network}"`);
     const name = reqs.extra?.name;
