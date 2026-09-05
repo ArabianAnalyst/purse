@@ -18,6 +18,8 @@ jobs:
           fetch-depth: 0
       - name: gitleaks
         uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   deps:
     name: osv-scanner (deps, report-only)
