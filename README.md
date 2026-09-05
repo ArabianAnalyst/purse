@@ -270,6 +270,10 @@ This library is the enforcement primitive, and it is genuinely useful on its own
 
 If you are taking an agent that spends money from a working demo to production and your risk or finance team needs approvals, a central audit, and reconciliation, that is what Purse Cloud is for.
 
+## Run it as a container
+
+`deploy/broker` packages enforcement mode as an image with both transports on one agent port, a token-protected admin port, receipts in Postgres, and telemetry on by default. The guide in [deploy/broker/README.md](deploy/broker/README.md) goes from `docker compose up` to a verified chain in Grafana in under an hour.
+
 ## The Deadlatch stack
 
 Purse is the **enforce** in Deadlatch, the open runtime governance stack for AI agents. Adopt one, or run all three.
