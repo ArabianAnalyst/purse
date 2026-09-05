@@ -66,9 +66,11 @@ export function loadConfig(env: Env = process.env, readFile: (path: string) => s
       }));
     } catch (e) { throw new ConfigError(`PURSE_X402_RESOURCES is not a JSON object of payee to URL (${(e as Error).message})`); }
     const network = env.PURSE_X402_NETWORK ?? "base-sepolia";
+    if (network !== "mock" && !REAL_NETWORKS.has(network)) throw new ConfigError(`PURSE_X402_NETWORK must be mock, base-sepolia, or base, got "${network}"`);
     const signer = (env.PURSE_X402_SIGNER ?? (network === "mock" ? "mock" : "evm")) as "mock" | "evm";
     if (signer !== "mock" && signer !== "evm") throw new ConfigError(`PURSE_X402_SIGNER must be mock or evm, got "${signer}"`);
     if (network === "mock" && signer === "evm") throw new ConfigError("PURSE_X402_SIGNER=evm cannot be used with the mock network");
+    if (signer === "mock" && network !== "mock") throw new ConfigError("PURSE_X402_SIGNER=mock is only valid with PURSE_X402_NETWORK=mock");
     if (signer === "evm" && !REAL_NETWORKS.has(network)) throw new ConfigError(`PURSE_X402_NETWORK must be base-sepolia or base for the evm signer, got "${network}"`);
     const allowMainnet = env.PURSE_X402_ALLOW_MAINNET === "1";
     if (network === "base" && !allowMainnet) throw new ConfigError("PURSE_X402_NETWORK=base moves real money; set PURSE_X402_ALLOW_MAINNET=1 to confirm");

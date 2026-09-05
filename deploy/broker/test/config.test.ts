@@ -56,3 +56,11 @@ test("x402 config: resources, signer, key file wins, mainnet gate", () => {
   assert.equal(m.executor.kind === "x402" && m.executor.signer, "mock");
   assert.throws(() => loadConfig({ ...base, PURSE_EXECUTOR: "x402", PURSE_X402_RESOURCES: resources, PURSE_X402_SIGNER: "evm", PURSE_X402_NETWORK: "mock", PURSE_X402_PRIVATE_KEY: KEY }), /mock network/);
 });
+
+test("rejects a bad network, a mock signer on a real network, and negative ports", () => {
+  const resources = JSON.stringify({ vendor: "https://pay.example/resource" });
+  assert.throws(() => loadConfig({ ...base, PURSE_EXECUTOR: "x402", PURSE_X402_RESOURCES: resources, PURSE_X402_SIGNER: "mock", PURSE_X402_NETWORK: "polygon" }), /PURSE_X402_NETWORK must be/);
+  assert.throws(() => loadConfig({ ...base, PURSE_EXECUTOR: "x402", PURSE_X402_RESOURCES: resources, PURSE_X402_SIGNER: "mock", PURSE_X402_NETWORK: "base-sepolia" }), /only valid with PURSE_X402_NETWORK=mock/);
+  assert.throws(() => loadConfig({ ...base, PURSE_AGENT_PORT: "-1" }), /non-negative integer/);
+  assert.throws(() => loadConfig({ ...base, PURSE_MAX_PENDING: "1.5" }), /non-negative integer/);
+});

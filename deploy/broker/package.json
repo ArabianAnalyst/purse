@@ -39,7 +39,7 @@
   "lavamoat": {
     "allowScripts": {
       "@opentelemetry/exporter-trace-otlp-http>@opentelemetry/otlp-transformer>protobufjs#7.6.6": false,
-      "tsx>esbuild#0.28.2": false,
+      "tsx>esbuild#0.28.2": true,
       "viem>ws>bufferutil#4.1.0": false,
       "viem>ws>utf-8-validate#5.0.10": false,
       "x402>wagmi>@wagmi/connectors>cbw-sdk>keccak#3.0.4": false
