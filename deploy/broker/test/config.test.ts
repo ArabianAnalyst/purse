@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { loadConfig, ConfigError } from "../src/config.js";
 
 const TOKEN = "a".repeat(32);
-const base = { PURSE_ADMIN_TOKEN: TOKEN, DATABASE_URL: "postgres://u:p@h/db" };
+const base = { PURSE_ADMIN_TOKEN: TOKEN, DATABASE_URL: "postgres://u:p@h/db", PURSE_MAX_PER_ACTION: "$5" };
 const KEY = "0x" + "1".repeat(64);
 
 test("minimal valid env", () => {
@@ -14,7 +14,9 @@ test("minimal valid env", () => {
   assert.deepEqual(c.ports, { agent: 8080, admin: 8081, bind: "0.0.0.0" });
   assert.equal(c.maxPending, 100);
   assert.equal(c.policy.currency, "USD");
+  assert.equal(c.policy.maxPerAction, "$5");
   assert.equal(c.otel, false);
+  assert.equal(c.openPolicy, false);
 });
 
 test("policy and ports parse", () => {
@@ -31,8 +33,8 @@ test("admin token is required and at least 24 characters", () => {
 });
 
 test("database is required unless jsonl is requested explicitly", () => {
-  assert.throws(() => loadConfig({ PURSE_ADMIN_TOKEN: TOKEN }), /DATABASE_URL/);
-  const c = loadConfig({ PURSE_ADMIN_TOKEN: TOKEN, PURSE_STORE: "jsonl", PURSE_AUDIT_FILE: "./x.jsonl" });
+  assert.throws(() => loadConfig({ PURSE_ADMIN_TOKEN: TOKEN, PURSE_ALLOW_OPEN_POLICY: "1" }), /DATABASE_URL/);
+  const c = loadConfig({ PURSE_ADMIN_TOKEN: TOKEN, PURSE_ALLOW_OPEN_POLICY: "1", PURSE_STORE: "jsonl", PURSE_AUDIT_FILE: "./x.jsonl" });
   assert.deepEqual(c.store, { kind: "jsonl", file: "./x.jsonl" });
 });
 
@@ -63,4 +65,18 @@ test("rejects a bad network, a mock signer on a real network, and negative ports
   assert.throws(() => loadConfig({ ...base, PURSE_EXECUTOR: "x402", PURSE_X402_RESOURCES: resources, PURSE_X402_SIGNER: "mock", PURSE_X402_NETWORK: "base-sepolia" }), /only valid with PURSE_X402_NETWORK=mock/);
   assert.throws(() => loadConfig({ ...base, PURSE_AGENT_PORT: "-1" }), /non-negative integer/);
   assert.throws(() => loadConfig({ ...base, PURSE_MAX_PENDING: "1.5" }), /non-negative integer/);
+});
+
+test("rejects unparsable money, a policy-free boot, and an unreadable key file", () => {
+  assert.throws(() => loadConfig({ ...base, PURSE_MAX_PER_ACTION: "50 dollars" }), /not a money amount/);
+  const { PURSE_MAX_PER_ACTION, ...noPolicy } = base;
+  assert.throws(() => loadConfig(noPolicy), /no policy/);
+  const c = loadConfig({ ...noPolicy, PURSE_ALLOW_OPEN_POLICY: "1" });
+  assert.equal(c.openPolicy, true);
+  const resources = JSON.stringify({ vendor: "https://pay.example/resource" });
+  const unreadable = () => { throw new Error("permission denied"); };
+  assert.throws(
+    () => loadConfig({ ...base, PURSE_EXECUTOR: "x402", PURSE_X402_RESOURCES: resources, PURSE_X402_SIGNER: "evm", PURSE_X402_NETWORK: "base-sepolia", PURSE_X402_KEY_FILE: "/run/secrets/key" }, unreadable),
+    /cannot read PURSE_X402_KEY_FILE/,
+  );
 });

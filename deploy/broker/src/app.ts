@@ -23,6 +23,9 @@ export async function createApp(cfg: Config, overrides: AppOverrides = {}): Prom
   if (store.kind === "jsonl") {
     console.error("purse-broker: PURSE_STORE=jsonl is for development only; receipts are in a local file, not Postgres");
   }
+  if (cfg.openPolicy) {
+    console.error("purse-broker: PURSE_ALLOW_OPEN_POLICY=1, every spend is allowed");
+  }
   const boot = verifyChain(store.store.all());
   if (!boot.ok) throw new Error(`audit chain fails verification at index ${boot.brokenAt} (${boot.reason})`);
   const { executor, signerAddress } = buildExecutor(cfg.executor, cfg.policy.currency, { signer: overrides.signer });

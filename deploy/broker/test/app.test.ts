@@ -13,7 +13,7 @@ function cfg(over: Partial<Config> = {}): Config {
     policy: { currency: "USD", maxPerAction: "$5", maxPerDay: "$100", requireApprovalOver: "$3", allow: ["api.stripe.com"] },
     store: { kind: "postgres", url: "postgres://unused", stream: "t" },
     ports: { agent: 0, admin: 0, bind: "127.0.0.1" },
-    adminToken: TOKEN, executor: { kind: "mock" }, maxPending: 5, otel: false, ...over,
+    adminToken: TOKEN, executor: { kind: "mock" }, maxPending: 5, otel: false, openPolicy: false, ...over,
   };
 }
 async function post(url: string, body: unknown, headers: Record<string, string> = {}) {
@@ -67,8 +67,12 @@ test("mcp tools on the agent port", async () => {
   const app = await createApp(cfg(), { sqlClient: new PGlite() as unknown as SqlClient });
   const { agentUrl } = await app.start();
   const client = new Client({ name: "test", version: "0.0.0" });
+  const errors: string[] = [];
+  client.onerror = (e) => errors.push(String(e));
+  const transport = new StreamableHTTPClientTransport(new URL(`${agentUrl}/mcp`));
+  transport.onerror = (e) => errors.push(String(e));
   try {
-    await client.connect(new StreamableHTTPClientTransport(new URL(`${agentUrl}/mcp`)));
+    await client.connect(transport);
     const tools = await client.listTools();
     assert.deepEqual(tools.tools.map((t) => t.name).sort(), ["execute_spend", "request_spend", "spend_status"]);
     const r = await client.callTool({ name: "request_spend", arguments: { amount: "$1", payee: "api.stripe.com", intent: "credits" } });
@@ -76,6 +80,8 @@ test("mcp tools on the agent port", async () => {
     assert.equal(decision.decision, "allowed");
     const x = await client.callTool({ name: "execute_spend", arguments: { grantId: decision.grantId } });
     assert.equal(JSON.parse((x.content as { text: string }[])[0]!.text).status, "paid");
+    assert.equal((await fetch(`${agentUrl}/mcp`)).status, 405);
+    assert.equal(errors.length, 0);
   } finally { await client.close().catch(() => undefined); await app.stop(); }
 });
 

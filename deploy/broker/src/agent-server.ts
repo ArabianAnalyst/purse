@@ -10,6 +10,10 @@ export function createAgentServer(broker: Broker): Server {
     try {
       const path = (req.url ?? "/").split("?")[0];
       if (req.method === "GET" && path === "/healthz") return send(res, 200, { ok: true });
+      if (path === "/mcp" && (req.method === "GET" || req.method === "DELETE")) {
+        res.writeHead(405, { allow: "POST" });
+        return res.end();
+      }
       if (req.method !== "POST") return send(res, 404, { error: "not found" });
       const body = await readJson(req);
       switch (path) {
