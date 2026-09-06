@@ -33,6 +33,13 @@ test("agent port: request, execute, status, health; admin port: auth, pending, a
   const { agentUrl, adminUrl } = await app.start();
   try {
     assert.deepEqual((await get(`${agentUrl}/healthz`)).json, { ok: true });
+    const idx = await get(`${agentUrl}/`);
+    assert.equal(idx.status, 200);
+    assert.equal(idx.json.service, "purse-broker");
+    assert.equal(typeof idx.json.version, "string");
+    assert.ok(String(idx.json.docs).startsWith("https://github.com/"));
+    assert.equal(JSON.stringify(idx.json).includes(TOKEN), false);
+    assert.equal((await get(`${adminUrl}/`)).status, 401);
     const r = await post(`${agentUrl}/request`, { amount: "$1", payee: "api.stripe.com", intent: "credits" });
     assert.equal(r.json.decision, "allowed");
     const x = await post(`${agentUrl}/execute`, { grantId: r.json.grantId });

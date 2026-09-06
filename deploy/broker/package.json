@@ -1,6 +1,6 @@
 {
   "name": "purse-broker",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Purse enforcement mode as a container. Agent port with HTTP and MCP, token-protected admin port, Postgres receipts, telemetry on by default.",
   "type": "module",

@@ -2,12 +2,13 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { z } from "zod";
+import { VERSION } from "./version.js";
 import type { Broker } from "@olurabian/purse";
 
 const text = (v: unknown) => ({ content: [{ type: "text" as const, text: JSON.stringify(v) }] });
 
 export function createMcpServer(broker: Broker): McpServer {
-  const server = new McpServer({ name: "purse-broker", version: "0.1.0" });
+  const server = new McpServer({ name: "purse-broker", version: VERSION });
   server.registerTool(
     "request_spend",
     {
