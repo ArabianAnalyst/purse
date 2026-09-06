@@ -161,10 +161,19 @@ Nothing caps the request body or the request rate; the stream grows with every r
 `fly.toml` runs the agent port publicly and keeps the admin port private. Set the secrets once, then deploy.
 
 ```bash
-fly launch --no-deploy --copy-config
-fly secrets set DATABASE_URL=... PURSE_ADMIN_TOKEN=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=...
-fly deploy
-fly proxy 8081:8081 -a purse-broker
+fly apps create purse-broker
+fly postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
+fly postgres attach purse-broker-db -a purse-broker
+fly secrets set -a purse-broker PURSE_ADMIN_TOKEN=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+fly deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.1.0 --ha=false
+```
+
+`--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you.
+
+The admin port is not exposed. Reach it through a WireGuard proxy, `fly proxy 8081:8081 -a purse-broker`, which on Windows needs an elevated terminal. Without one, run the admin call inside the machine instead.
+
+```bash
+fly machine exec <machine-id> -a purse-broker "wget -qO- --header='authorization: Bearer $PURSE_ADMIN_TOKEN' http://127.0.0.1:8081/verify"
 ```
 
 ## Image
