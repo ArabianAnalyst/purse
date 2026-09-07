@@ -156,6 +156,31 @@ Run one broker per `PURSE_STREAM`. A second broker on the same stream is a fork,
 
 Nothing caps the request body or the request rate; the stream grows with every request, so put your own gateway in front of the agent port.
 
+## Backups and restore
+
+Receipts are the one thing in this deployment that cannot be regenerated. Open grants and pending approvals live in memory and are lost on restart by design (see Known limits), so the database is the whole recovery story.
+
+**Two layers.**
+
+1. **Volume snapshots.** Fly snapshots the Postgres volume daily. Set the retention to fourteen days once per volume: `flyctl volumes update <volume id> -a <db app> --snapshot-retention 14`. List them with `flyctl volumes snapshots list <volume id>`. To recover a whole database, create a new Postgres app from a snapshot with `flyctl postgres create --snapshot-id <id>` and re-attach it to the broker. Recovery point up to twenty-four hours, recovery time a few minutes.
+2. **A logical dump you hold yourself.** The table dumps as plain SQL with one INSERT per receipt, which restores into any Postgres, including the embedded one the restore check below uses. From outside the machine, without a tunnel:
+
+```sh
+flyctl machine exec <db machine id> -a <db app> \
+  "sh -c 'PGPASSWORD=$OPERATOR_PASSWORD pg_dump -h localhost -U postgres -d <database> -t receipts --no-owner --no-privileges --inserts'" \
+  > receipts-$(date +%F).sql
+```
+
+The password is read from the machine's own environment and never leaves it. Keep the dump somewhere that is not Fly. Weekly is enough while the stream is small.
+
+**The restore check.** A backup that has not been restored is a guess. This restores a dump into an embedded Postgres and runs the same chain verification `/verify` runs, in a fresh database, on your machine:
+
+```sh
+node scripts/restore-verify.mjs receipts-2026-09-07.sql purse
+```
+
+It prints the number of receipts restored, the head hash, and the verify result, and exits non-zero if the chain does not verify or the stream is empty. Compare the count with the live `/verify` and the head hash with the last receipt. Run it after every dump, and file the output next to the dump.
+
 ## Reference deployment on Fly
 
 `fly.toml` runs the agent port publicly and keeps the admin port private. Set the secrets once, then deploy.
