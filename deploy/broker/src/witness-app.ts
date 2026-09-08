@@ -24,7 +24,7 @@ export interface WitnessState {
   lastAnchor: { seq: number; head: string; logIndex: string; at: string } | null;
   /** Receipts appended since the last anchor. */
   lag: number;
-  /** The seq of the most recent conflict, so the same conflict is not logged twice in a row. -1 marks a malformed anchor seen in verify(), not tied to a seq. */
+  /** The seq of the most recent tick-time conflict, so the same conflict is not logged twice in a row. */
   conflictSeq: number | null;
 }
 export interface WitnessOverrides { sqlClient?: SqlClient; fetch?: typeof fetch; now?: () => string; signer?: P256Signer }
@@ -57,6 +57,9 @@ function wellFormed(a: unknown): a is Anchor {
   return !!x && typeof x === "object" && x.v === 1 && typeof x.head === "string" && typeof x.seq === "number"
     && !!x.entry?.logIndex && !!x.proof?.checkpoint && !!x.witness?.publicKey;
 }
+
+/** One row from the anchors table, read by its SQL columns; `anchor` is null when the record does not parse as a well-formed Anchor. */
+interface AnchorRow { seq: number; head: string; anchor: Anchor | null }
 
 const EVENTS_SCHEMA = `CREATE TABLE IF NOT EXISTS witness_events (
   n BIGSERIAL PRIMARY KEY,
@@ -93,8 +96,18 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
   };
   meter.createObservableGauge("deadlatch.witness.lag").addCallback((r) => r.observe(state.lag, { stream: cfg.stream }));
 
-  const trustedRows = (await anchors.list(cfg.stream)).filter(wellFormed).filter(isTrusted);
-  const last = trustedRows.length ? trustedRows[trustedRows.length - 1]! : null;
+  /** The record column, parsed defensively, keyed on the SQL columns the unique constraint keys on, so a bad record can never throw or go undetected. */
+  async function rowsFrom(sinceSeq: number): Promise<AnchorRow[]> {
+    const { rows } = await sql.query("SELECT seq, head, record FROM anchors WHERE stream = $1 AND seq > $2 ORDER BY seq", [cfg.stream, sinceSeq]);
+    return rows.map((r) => {
+      let parsed: unknown = null;
+      try { parsed = JSON.parse(String(r.record)); } catch { parsed = null; }
+      return { seq: Number(r.seq), head: String(r.head), anchor: wellFormed(parsed) ? parsed : null };
+    });
+  }
+
+  const trustedRows = (await rowsFrom(-1)).filter((r) => r.anchor && isTrusted(r.anchor));
+  const last = trustedRows.length ? trustedRows[trustedRows.length - 1]!.anchor! : null;
   if (last) state.lastAnchor = { seq: last.seq, head: last.head, logIndex: last.entry.logIndex, at: last.at };
 
   async function records(): Promise<Receipt[]> {
@@ -132,17 +145,14 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
         const head = recs[seq]!.hash;
         state.head = { seq, hash: head };
         if (state.lastAnchor && state.lastAnchor.seq === seq && state.lastAnchor.head === head) { done(at, true, null, true); return; }
-        let rowsAtHead: unknown[];
-        try { rowsAtHead = await anchors.list(cfg.stream, seq - 1); }
-        catch { rowsAtHead = [{ seq }]; }
-        const row = rowsAtHead.find((r) => (r as Partial<Anchor>).seq === seq) as unknown;
+        const row = (await rowsFrom(seq - 1)).find((r) => r.seq === seq);
         if (row !== undefined) {
-          if (wellFormed(row) && row.head === head && isTrusted(row)) {
-            state.lastAnchor = { seq, head, logIndex: row.entry.logIndex, at: row.at };
+          if (row.anchor && row.head === head && isTrusted(row.anchor)) {
+            state.lastAnchor = { seq, head, logIndex: row.anchor.entry.logIndex, at: row.anchor.at };
             done(at, true, null, true);
             return;
           }
-          const why = !wellFormed(row) ? "a malformed anchor row" : row.head !== head ? "an anchor for a different head" : "an anchor signed by an untrusted witness key";
+          const why = !row.anchor ? "a malformed anchor row" : row.head !== head ? "an anchor for a different head" : "an anchor signed by an untrusted witness key";
           if (state.conflictSeq !== seq) {
             await event("anchor-conflict", `seq ${seq} already has ${why}, not submitting`);
             state.conflictSeq = seq;
@@ -189,21 +199,13 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
     publicKey, trust,
     state: () => ({ ...state, head: state.head ? { ...state.head } : null, lastAnchor: state.lastAnchor ? { ...state.lastAnchor } : null, log: { ...state.log } }),
     tick,
-    anchors: (sinceSeq = -1) => anchors.list(cfg.stream, sinceSeq),
+    anchors: async (sinceSeq = -1) => (await rowsFrom(sinceSeq)).flatMap((r) => (r.anchor ? [r.anchor] : [])),
     async events(sinceN = 0) {
       const { rows } = await sql.query("SELECT n, stream, at, kind, detail FROM witness_events WHERE stream = $1 AND n > $2 ORDER BY n LIMIT 1000", [cfg.stream, sinceN]);
       return rows.map((r) => ({ n: Number(r.n), stream: String(r.stream), at: new Date(String(r.at)).toISOString(), kind: r.kind as WitnessEventKind, detail: String(r.detail) }));
     },
     async verify() {
-      let list: Anchor[];
-      try { list = (await anchors.list(cfg.stream)).filter(wellFormed); }
-      catch {
-        if (state.conflictSeq !== -1) {
-          await event("anchor-conflict", "a malformed anchor row");
-          state.conflictSeq = -1;
-        }
-        list = [];
-      }
+      const list = (await rowsFrom(-1)).flatMap((r) => (r.anchor ? [r.anchor] : []));
       return verifyAnchored(await records(), list, trust, { stream: cfg.stream });
     },
     ready,

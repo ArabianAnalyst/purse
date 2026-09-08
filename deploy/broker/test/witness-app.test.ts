@@ -251,26 +251,36 @@ test("WITNESS_TRUSTED_KEYS makes an earlier key's anchors count", async () => {
   await B.close();
 });
 
-test("a malformed anchor row neither crashes boot nor verify", async () => {
-  const db = new PGlite();
-  await seedReceipts(db, "t", 1);
-  await db.query("CREATE TABLE IF NOT EXISTS anchors (n BIGSERIAL PRIMARY KEY, stream TEXT NOT NULL, seq BIGINT NOT NULL, head TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, record TEXT NOT NULL, UNIQUE (stream, seq))");
-  await db.query("INSERT INTO anchors (stream, seq, head, at, record) VALUES ('t', 0, repeat('0', 64), now(), '{}')");
-  const rekor = new FakeRekor();
-  const c = clock();
-  const signer = P256Signer.generate();
-  const w = await createWitness(witnessCfg(rekor), { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer });
-  assert.equal(w.state().lastAnchor, null);
-  const v = await w.verify();
-  assert.equal(v.coveredUpTo, null);
-  await w.tick();
-  const ev = await w.events();
-  assert.equal(ev.filter((e) => e.kind === "anchor-conflict").length, 1);
-  await seedReceipts(db, "t", 1, 1);
-  await w.tick();
-  assert.equal(w.state().lastAnchor?.seq, 1);
-  await w.close();
-});
+for (const record of ["{}", "not json"]) {
+  test(`a malformed anchor row (record ${JSON.stringify(record)}) at the head's seq neither resubmits, crashes boot, nor breaks /anchors or /verify`, async () => {
+    const db = new PGlite();
+    await seedReceipts(db, "t", 2);
+    // The anchors table must exist before we can seed a bad row into it; createWitness() would otherwise create it on boot.
+    await db.query("CREATE TABLE IF NOT EXISTS anchors (n BIGSERIAL PRIMARY KEY, stream TEXT NOT NULL, seq BIGINT NOT NULL, head TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, record TEXT NOT NULL, UNIQUE (stream, seq))");
+    await db.query("INSERT INTO anchors (stream, seq, head, at, record) VALUES ('t', 1, repeat('0', 64), now(), $1)", [record]);
+    const rekor = new FakeRekor();
+    const c = clock();
+    const signer = P256Signer.generate();
+    const w = await createWitness(witnessCfg(rekor), { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer });
+    assert.equal(w.state().lastAnchor, null, "boot succeeds and does not adopt the bad row");
+    await w.tick();
+    await w.tick();
+    await w.tick();
+    await w.tick();
+    assert.equal(rekor.submits, 0, "never resubmits against a row it cannot parse");
+    const conflicts = (await w.events()).filter((e) => e.kind === "anchor-conflict");
+    assert.equal(conflicts.length, 1, "the conflict is logged once, not every tick");
+    assert.match(conflicts[0]?.detail ?? "", /malformed/);
+    assert.equal(w.ready().ok, false);
+    await assert.doesNotReject(async () => assert.deepEqual(await w.anchors(), []));
+    assert.equal((await w.verify()).coveredUpTo, null);
+    await seedReceipts(db, "t", 1, 2);
+    await w.tick();
+    assert.equal(w.state().lastAnchor?.seq, 2);
+    assert.equal(rekor.submits, 1);
+    await w.close();
+  });
+}
 
 test("the witness never writes the receipts table", async () => {
   const { db, w } = await setup(3);
