@@ -113,6 +113,7 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `WITNESS_STREAM` | `PURSE_STREAM` or `purse` | The stream the witness anchors. One witness per stream. |
 | `WITNESS_KEY_FILE` | | PEM file with the witness's P-256 key. Created on first run when absent. |
 | `WITNESS_KEY_PEM` | | The key as a PEM string, for a secret store. The file wins when both are set. `node dist/witness.js keygen` prints one. |
+| `WITNESS_TRUSTED_KEYS` | | Comma-separated public keys of earlier witness keys, so anchors they signed still count after a rotation. |
 | `REKOR_URL` | `https://log2025-1.rekor.sigstore.dev` | The Rekor v2 instance. It rotates by year, so treat it as configuration. |
 | `REKOR_LOG_KEY` | required for the witness | `<origin>=<base64 SPKI DER>`, the log's Ed25519 key from Sigstore's trust root. See "The witness". |
 | `REKOR_TIMEOUT_MS` | `30000` | Per submission. The log answers in a few seconds; the client guide asks for at least twenty. |
@@ -164,7 +165,7 @@ curl -sL https://raw.githubusercontent.com/sigstore/root-signing/main/targets/tr
 
    The witness computes the key's C2SP id and refuses to start on anything that is not an Ed25519 key. The `validFor` window on that entry is what lets old anchors verify after the log rotates.
 
-2. The witness key. Generated on first run into `WITNESS_KEY_FILE`, or made once with `node dist/witness.js keygen` and stored as `WITNESS_KEY_PEM`. The public key is printed at start and served on `GET /`. Pin it the way you pin an SSH host key. A rotated witness is a new key; old anchors stay valid under the old one because each anchor carries the key that signed it. The file wins over `WITNESS_KEY_PEM` only when it already exists; when `WITNESS_KEY_FILE` is set but the file is absent and a pem is also given, the witness uses the pem and does not write the file.
+2. The witness key. Generated on first run into `WITNESS_KEY_FILE`, or made once with `node dist/witness.js keygen` and stored as `WITNESS_KEY_PEM`. The public key is printed at start and served on `GET /`. Pin it the way you pin an SSH host key. A rotated witness is a new key; old anchors stay valid under the old one because each anchor carries the key that signed it. Put the old key in `WITNESS_TRUSTED_KEYS` so its anchors still count on `/verify` and toward readiness. The file wins over `WITNESS_KEY_PEM` only when it already exists; when `WITNESS_KEY_FILE` is set but the file is absent and a pem is also given, the witness uses the pem and does not write the file.
 
 Run it with compose. `REKOR_LOG_KEY` is the one variable compose will not default for you.
 
@@ -185,7 +186,7 @@ npx receipt-verify chain.json --anchors http://127.0.0.1:8082 --log-key "$REKOR_
 
 Exit 0 means the chain verifies and at least one anchor holds. Rewrite a receipt in `chain.json` and run it again, and the output names the position.
 
-Readiness on the witness port, `GET /readyz`, is 200 only when the last tick verified the chain within `WITNESS_MAX_LAG` intervals and the head is anchored or the last anchor is younger than that window. A broken chain, a log that will not answer, or a stalled tick all turn it red, and `GET /events` says which. The witness reads `receipts` and writes only `anchors` and `witness_events`; nothing on its port can change anything.
+Readiness on the witness port, `GET /readyz`, is 200 only when the last tick verified the chain within `WITNESS_MAX_LAG` intervals and the head is anchored or the last anchor is younger than that window. A broken chain, a log that will not answer, or a stalled tick all turn it red, and `GET /events` says which. `GET /events` pages by `since` in chunks of one thousand, so a long history takes more than one call to walk. The witness reads `receipts` and writes only `anchors` and `witness_events`; nothing on its port can change anything.
 
 Limits. One witness per stream, a second one on the same stream records a conflict and stops anchoring. The public log's instance URL rotates by year; when it does, set `REKOR_URL` and `REKOR_LOG_KEY` to the new one and old anchors still verify against the old key. Time is not proven by an anchor, only order.
 
@@ -215,8 +216,8 @@ Receipts are the one thing in this deployment that cannot be regenerated. Open g
 
 **Two layers.**
 
-1. **Volume snapshots.** Fly snapshots the Postgres volume daily. Set the retention to fourteen days once per volume: `flyctl volumes update <volume id> -a <db app> --snapshot-retention 14`. List them with `flyctl volumes snapshots list <volume id>`. To recover a whole database, create a new Postgres app from a snapshot with `flyctl postgres create --snapshot-id <id>` and re-attach it to the broker. Recovery point up to twenty-four hours, recovery time a few minutes.
-2. **A logical dump you hold yourself.** The table dumps as plain SQL with one INSERT per receipt, which restores into any Postgres, including the embedded one the restore check below uses. From outside the machine, without a tunnel:
+1. **Volume snapshots.** Fly snapshots the Postgres volume daily. Set the retention to fourteen days once per volume, with `flyctl volumes update <volume id> -a <db app> --snapshot-retention 14`. List them with `flyctl volumes snapshots list <volume id>`. To recover a whole database, create a new Postgres app from a snapshot with `flyctl postgres create --snapshot-id <id>` and re-attach it to the broker. Recovery point up to twenty-four hours, recovery time a few minutes.
+2. **A logical dump you hold yourself.** The table dumps as plain SQL with one INSERT per receipt, which restores into any Postgres, including the embedded one the restore check below uses. This pulls it from outside the machine, without a tunnel.
 
 ```sh
 flyctl machine exec <db machine id> -a <db app> \
@@ -226,7 +227,7 @@ flyctl machine exec <db machine id> -a <db app> \
 
 The password is read from the machine's own environment and never leaves it. Keep the dump somewhere that is not Fly. Weekly is enough while the stream is small.
 
-**The restore check.** A backup that has not been restored is a guess. This restores a dump into an embedded Postgres and runs the same chain verification `/verify` runs, in a fresh database, on your machine:
+**The restore check.** A backup that has not been restored is a guess. This restores a dump into an embedded Postgres and runs the same chain verification `/verify` runs, in a fresh database, on your machine.
 
 ```sh
 node scripts/restore-verify.mjs receipts-2026-09-07.sql purse
@@ -239,19 +240,21 @@ It prints the number of receipts restored, the head hash, and the verify result,
 `fly.toml` runs the agent port publicly and keeps the admin port private. Set the secrets once, then deploy.
 
 ```bash
-fly apps create purse-broker
-fly postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
-fly postgres attach purse-broker-db -a purse-broker
-fly secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-fly deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.1.0 --ha=false
+flyctl apps create purse-broker
+flyctl postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
+flyctl postgres attach purse-broker-db -a purse-broker
+flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.2.0 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.2.0 --ha=false
 ```
 
-`--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `fly deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
+`--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `flyctl deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
 
-The admin port is not exposed. Reach it through a WireGuard proxy, `fly proxy 8081:8081 -a purse-broker`, which on Windows needs an elevated terminal. Without one, run the admin call inside the machine instead.
+Why `WITNESS_KEY_PEM` is a secret rather than a mounted file on Fly. Fly volumes mount root-owned, and the image runs as a non-root user, so the witness process cannot write a key file onto one. Fly secrets are app-wide, so the broker machines receive `WITNESS_KEY_PEM` too, though the broker never reads it. An operator who wants the key on the witness machines alone can run the witness as its own Fly app, with the same image and the same command, and set the secret there instead.
+
+The admin port is not exposed. Reach it through a WireGuard proxy, `flyctl proxy 8081:8081 -a purse-broker`, which on Windows needs an elevated terminal. Without one, run the admin call inside the machine instead.
 
 ```bash
-fly machine exec <machine-id> -a purse-broker "wget -qO- --header='authorization: Bearer $PURSE_ADMIN_TOKEN' http://127.0.0.1:8081/verify"
+flyctl machine exec <machine-id> -a purse-broker "wget -qO- --header='authorization: Bearer $PURSE_ADMIN_TOKEN' http://127.0.0.1:8081/verify"
 ```
 
 The witness port is not exposed either. Reach it the same way, on the witness machine.

@@ -45,3 +45,4 @@ primary_region = "lhr"
     path = "/healthz"
 
 # Secrets, set once: fly secrets set DATABASE_URL=... PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=...
+# Fly secrets are app-wide, so the app process gets WITNESS_KEY_PEM too even though it never reads it; run the witness as its own Fly app with the same image and command to keep the key off the app's machines.
