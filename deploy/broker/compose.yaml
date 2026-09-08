@@ -28,3 +28,24 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
       - "127.0.0.1:8081:8081"
+  witness:
+    build: .
+    command: ["node", "dist/witness.js"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgres://purse:purse@postgres:5432/purse
+      WITNESS_STREAM: ${PURSE_STREAM:-purse}
+      WITNESS_KEY_FILE: /data/witness-key.pem
+      REKOR_URL: ${REKOR_URL:-https://log2025-1.rekor.sigstore.dev}
+      REKOR_LOG_KEY: ${REKOR_LOG_KEY:?set REKOR_LOG_KEY to <origin>=<base64 DER> from Sigstore's trust root, see the README}
+      WITNESS_INTERVAL_MS: ${WITNESS_INTERVAL_MS:-300000}
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+    volumes:
+      - witness-data:/data
+    ports:
+      - "127.0.0.1:8082:8082"
+volumes:
+  witness-data: {}

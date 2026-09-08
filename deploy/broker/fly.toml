@@ -2,11 +2,16 @@ app = "purse-broker"
 primary_region = "lhr"
 
 # One broker per PURSE_STREAM. A rolling deploy would run two on the same stream and the database would refuse the fork.
+# One witness per stream for the same reason, on its own process group.
 [deploy]
   strategy = "immediate"
 
 [build]
   dockerfile = "Dockerfile"
+
+[processes]
+  app = "node dist/main.js"
+  witness = "node dist/witness.js"
 
 [env]
   PURSE_AGENT_PORT = "8080"
@@ -16,9 +21,14 @@ primary_region = "lhr"
   PURSE_MAX_PER_DAY = "$500"
   PURSE_REQUIRE_APPROVAL_OVER = "$20"
   PURSE_ALLOW = "api.stripe.com"
+  WITNESS_STREAM = "purse"
+  WITNESS_PORT = "8082"
+  REKOR_URL = "https://log2025-1.rekor.sigstore.dev"
+  # REKOR_LOG_KEY is public and lives here too; set it with `fly secrets set` or paste it, it is the log's public key from Sigstore's trust root.
 
-# Agent port is public. The admin port is not exposed; reach it with `fly proxy 8081:8081 -a purse-broker`.
+# Agent port is public, on the app process only. The admin port and the witness port are not exposed; reach them with `flyctl machine exec`.
 [[services]]
+  processes = ["app"]
   internal_port = 8080
   protocol = "tcp"
   auto_stop_machines = false
@@ -34,4 +44,4 @@ primary_region = "lhr"
     timeout = "3s"
     path = "/healthz"
 
-# Secrets, set once: fly secrets set DATABASE_URL=... PURSE_ADMIN_TOKEN=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=...
+# Secrets, set once: fly secrets set DATABASE_URL=... PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=...

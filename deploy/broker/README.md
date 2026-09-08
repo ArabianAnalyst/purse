@@ -110,6 +110,16 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `PURSE_AGENT_PORT` | `8080` | Agent port. |
 | `PURSE_ADMIN_PORT` | `8081` | Admin port. |
 | `PURSE_BIND` | `0.0.0.0` | Bind address for both. |
+| `WITNESS_STREAM` | `PURSE_STREAM` or `purse` | The stream the witness anchors. One witness per stream. |
+| `WITNESS_KEY_FILE` | | PEM file with the witness's P-256 key. Created on first run when absent. |
+| `WITNESS_KEY_PEM` | | The key as a PEM string, for a secret store. The file wins when both are set. `node dist/witness.js keygen` prints one. |
+| `REKOR_URL` | `https://log2025-1.rekor.sigstore.dev` | The Rekor v2 instance. It rotates by year, so treat it as configuration. |
+| `REKOR_LOG_KEY` | required for the witness | `<origin>=<base64 SPKI DER>`, the log's Ed25519 key from Sigstore's trust root. See "The witness". |
+| `REKOR_TIMEOUT_MS` | `30000` | Per submission. The log answers in a few seconds; the client guide asks for at least twenty. |
+| `WITNESS_INTERVAL_MS` | `300000` | How often the witness checks the head. |
+| `WITNESS_MAX_LAG` | `2` | Intervals the witness may fall behind before readiness goes red. |
+| `WITNESS_PORT` | `8082` | The witness port, read-only, no token. |
+| `WITNESS_BIND` | `0.0.0.0` | Bind address for the witness port. |
 | `PURSE_CURRENCY` | `USD` | Policy currency. Must be USD for x402 on a real network. |
 | `PURSE_MAX_PER_ACTION` | | Cap per spend, for example `$50`. |
 | `PURSE_MAX_PER_DAY` | | Rolling daily cap. Open grants reserve budget. |
@@ -137,6 +147,48 @@ Set `PURSE_EXECUTOR=x402`, map payees to resource URLs, and give the broker a wa
 
 The key exists in the broker's process and nowhere else. Not in the agent. Not in a prompt. Not on the agent port.
 
+## The witness
+
+A hash chain in the broker's own database is tamper-evident to the operator and meaningless to everyone else, because whoever holds the whole log can rebuild it. The witness closes that. It is a second process on the same image, `node dist/witness.js`, that reads the receipt stream every five minutes, verifies the chain, and when the head has moved, signs the head with its own key and submits it to Rekor, Sigstore's public transparency log. The log's reply, an inclusion proof and a signed checkpoint, is verified before it is stored beside the receipts in an `anchors` table, and served read-only on the witness port.
+
+What an anchor proves. Everything at or below the anchored position is what it was when the public log recorded the head. A rewrite there breaks the anchor and is named by position. A truncation there is a missing record and is named too. Order is proven by the log index. Wall-clock time is not, the `at` field is the witness's clock.
+
+Two keys make it meaningful, and neither comes from this image.
+
+1. The log key. Sigstore publishes it in the `sigstore/root-signing` repository, `targets/trusted_root.json`, in the `tlogs` entry whose `baseUrl` is your `REKOR_URL`, field `publicKey.rawBytes`. This prints it in the form `REKOR_LOG_KEY` takes.
+
+```sh
+curl -sL https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json \
+  | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const t=JSON.parse(d).tlogs.find(t=>t.baseUrl.includes("log2025-1"));console.log(new URL(t.baseUrl).host+"="+t.publicKey.rawBytes)})'
+```
+
+   The witness computes the key's C2SP id and refuses to start on anything that is not an Ed25519 key. The `validFor` window on that entry is what lets old anchors verify after the log rotates.
+
+2. The witness key. Generated on first run into `WITNESS_KEY_FILE`, or made once with `node dist/witness.js keygen` and stored as `WITNESS_KEY_PEM`. The public key is printed at start and served on `GET /`. Pin it the way you pin an SSH host key. A rotated witness is a new key; old anchors stay valid under the old one because each anchor carries the key that signed it. The file wins over `WITNESS_KEY_PEM` only when it already exists; when `WITNESS_KEY_FILE` is set but the file is absent and a pem is also given, the witness uses the pem and does not write the file.
+
+Run it with compose. `REKOR_LOG_KEY` is the one variable compose will not default for you.
+
+```sh
+export REKOR_LOG_KEY="$(curl -sL https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const t=JSON.parse(d).tlogs.find(t=>t.baseUrl.includes("log2025-1"));console.log(new URL(t.baseUrl).host+"="+t.publicKey.rawBytes)})')"
+docker compose up --build
+curl -s http://127.0.0.1:8082/            # the witness's public key, the log it uses, and the exact verify command
+curl -s http://127.0.0.1:8082/verify      # verifyAnchored over the live chain, with coveredUpTo
+curl -s http://127.0.0.1:8081/verify -H "authorization: Bearer $PURSE_ADMIN_TOKEN"   # the broker's view, now with anchoredUpTo
+```
+
+The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. `npx receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read.
+
+```sh
+curl -s http://127.0.0.1:8081/audit -H "authorization: Bearer $PURSE_ADMIN_TOKEN" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.stringify(JSON.parse(d).receipts)))' > chain.json
+npx receipt-verify chain.json --anchors http://127.0.0.1:8082 --log-key "$REKOR_LOG_KEY" --witness-key <public key from GET /> --stream purse
+```
+
+Exit 0 means the chain verifies and at least one anchor holds. Rewrite a receipt in `chain.json` and run it again, and the output names the position.
+
+Readiness on the witness port, `GET /readyz`, is 200 only when the last tick verified the chain within `WITNESS_MAX_LAG` intervals and the head is anchored or the last anchor is younger than that window. A broken chain, a log that will not answer, or a stalled tick all turn it red, and `GET /events` says which. The witness reads `receipts` and writes only `anchors` and `witness_events`; nothing on its port can change anything.
+
+Limits. One witness per stream, a second one on the same stream records a conflict and stops anchoring. The public log's instance URL rotates by year; when it does, set `REKOR_URL` and `REKOR_LOG_KEY` to the new one and old anchors still verify against the old key. Time is not proven by an anchor, only order.
+
 ## Where each port may be reached from
 
 The enforcement property only holds under the deployment contract in the Purse threat model. In network terms it comes to this.
@@ -145,6 +197,7 @@ The enforcement property only holds under the deployment contract in the Purse t
 - The admin port is reachable from operators only. Never from the agent's network. A leaked token here is a full compromise, so rotate it like a password.
 - The wallet key reaches the broker as a mounted secret. Nothing in the agent's runtime holds a rail credential.
 - The agent has no other payment tool and no direct access to the rail. If it can pay some other way, the broker is not a boundary, it is a suggestion.
+- The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret. Still, put it behind your own network boundary unless you mean to publish it.
 
 ## Known limits
 
@@ -189,16 +242,22 @@ It prints the number of receipts restored, the head hash, and the verify result,
 fly apps create purse-broker
 fly postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
 fly postgres attach purse-broker-db -a purse-broker
-fly secrets set -a purse-broker PURSE_ADMIN_TOKEN=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+fly secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
 fly deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.1.0 --ha=false
 ```
 
-`--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you.
+`--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `fly deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
 
 The admin port is not exposed. Reach it through a WireGuard proxy, `fly proxy 8081:8081 -a purse-broker`, which on Windows needs an elevated terminal. Without one, run the admin call inside the machine instead.
 
 ```bash
 fly machine exec <machine-id> -a purse-broker "wget -qO- --header='authorization: Bearer $PURSE_ADMIN_TOKEN' http://127.0.0.1:8081/verify"
+```
+
+The witness port is not exposed either. Reach it the same way, on the witness machine.
+
+```bash
+flyctl machine exec <witness machine id> -a purse-broker "wget -qO- http://127.0.0.1:8082/verify"
 ```
 
 ## Image

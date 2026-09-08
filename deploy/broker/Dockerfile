@@ -12,7 +12,8 @@ WORKDIR /app
 COPY --from=build --chown=purse:purse /app/package.json ./package.json
 COPY --from=build --chown=purse:purse /app/node_modules ./node_modules
 COPY --from=build --chown=purse:purse /app/dist ./dist
+RUN mkdir -p /data && chown purse:purse /data
 USER purse
-EXPOSE 8080 8081
+EXPOSE 8080 8081 8082
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s CMD wget -qO- "http://127.0.0.1:${PURSE_ADMIN_PORT:-8081}/healthz" || exit 1
 CMD ["node", "dist/main.js"]
