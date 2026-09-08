@@ -61,6 +61,14 @@ test("agent port: request, execute, status, health; admin port: auth, pending, a
     assert.equal(x2.json.status, "paid");
     const v = await get(`${adminUrl}/verify`, auth);
     assert.equal(v.json.ok, true);
+    const v0 = await get(`${adminUrl}/verify`, auth);
+    assert.equal(v0.json.anchoredUpTo, null, "no anchors table yet");
+    assert.equal(v0.json.anchors, 0);
+    await db.query(`CREATE TABLE IF NOT EXISTS anchors (n BIGSERIAL PRIMARY KEY, stream TEXT NOT NULL, seq BIGINT NOT NULL, head TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, record TEXT NOT NULL, UNIQUE (stream, seq))`);
+    await db.query("INSERT INTO anchors (stream, seq, head, at, record) VALUES ('t', 1, 'h', now(), '{}')");
+    const v1 = await get(`${adminUrl}/verify`, auth);
+    assert.equal(v1.json.anchoredUpTo, 1);
+    assert.equal(v1.json.anchors, 1);
     assert.ok((v.json.records as number) >= 4);
     assert.equal(v.json.degraded, null);
     const audit = await get(`${adminUrl}/audit?since=2000-01-01T00:00:00.000Z`, auth);

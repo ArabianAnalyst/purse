@@ -51,7 +51,7 @@ export async function createApp(cfg: Config, overrides: AppOverrides = {}): Prom
     broker, store, signerAddress, ready,
     async start() {
       agent = await listen(createAgentServer(broker), cfg.ports.agent, cfg.ports.bind);
-      admin = await listen(createAdminServer(broker, store, cfg.adminToken, ready), cfg.ports.admin, cfg.ports.bind);
+      admin = await listen(createAdminServer(broker, store, cfg.adminToken, ready, cfg.store.kind === "postgres" ? cfg.store.stream : "purse"), cfg.ports.admin, cfg.ports.bind);
       return { agentUrl: agent.url, adminUrl: admin.url };
     },
     async stop() {

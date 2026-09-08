@@ -10,6 +10,7 @@ export interface OpenedStore {
   degraded: () => Error | null;
   flush: () => Promise<void>;
   close: () => Promise<void>;
+  sql?: SqlClient;
 }
 
 export async function openStore(cfg: StoreConfig, client?: SqlClient): Promise<OpenedStore> {
@@ -23,7 +24,7 @@ export async function openStore(cfg: StoreConfig, client?: SqlClient): Promise<O
   const sql: SqlClient = client ?? (pool as unknown as SqlClient);
   const store = await PostgresStore.open<DecisionPayload>(sql, { stream: cfg.stream });
   return {
-    store, kind: "postgres",
+    store, kind: "postgres", sql,
     pending: () => store.pending(), degraded: () => store.degraded(), flush: () => store.flush(),
     close: async () => { await store.flush().catch(() => undefined); if (pool) await pool.end(); },
   };

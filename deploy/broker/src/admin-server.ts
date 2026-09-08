@@ -5,7 +5,7 @@ import type { OpenedStore } from "./store.js";
 
 export interface Readiness { ok: boolean; reason?: string }
 
-export function createAdminServer(broker: Broker, store: OpenedStore, token: string, ready: () => Readiness): Server {
+export function createAdminServer(broker: Broker, store: OpenedStore, token: string, ready: () => Readiness, stream = "purse"): Server {
   return createServer(async (req, res) => {
     try {
       const url = new URL(req.url ?? "/", "http://admin");
@@ -17,7 +17,8 @@ export function createAdminServer(broker: Broker, store: OpenedStore, token: str
           case "/pending": return send(res, 200, { pending: broker.pending() });
           case "/verify": {
             const v = broker.verify();
-            return send(res, 200, { ...v, records: broker.audit().length, pending: store.pending(), degraded: store.degraded()?.message ?? null });
+            const anchored = await anchoredUpTo(store, stream);
+            return send(res, 200, { ...v, records: broker.audit().length, pending: store.pending(), degraded: store.degraded()?.message ?? null, ...anchored });
           }
           case "/audit": {
             const since = url.searchParams.get("since");
@@ -42,4 +43,17 @@ export function createAdminServer(broker: Broker, store: OpenedStore, token: str
       if (!res.headersSent) send(res, errorStatus(e), { error: (e as Error).message });
     }
   });
+}
+
+/** The highest anchored seq and the anchor count for this stream, or null and 0 when there is no anchors table yet. */
+async function anchoredUpTo(store: OpenedStore, stream: string): Promise<{ anchoredUpTo: number | null; anchors: number }> {
+  if (!store.sql) return { anchoredUpTo: null, anchors: 0 };
+  try {
+    const { rows } = await store.sql.query("SELECT max(seq) AS top, count(*)::int AS n FROM anchors WHERE stream = $1", [stream]);
+    const r = rows[0];
+    const top = r?.top == null ? null : Number(r.top);
+    return { anchoredUpTo: top, anchors: Number(r?.n ?? 0) };
+  } catch {
+    return { anchoredUpTo: null, anchors: 0 };
+  }
 }
