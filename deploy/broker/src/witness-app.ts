@@ -18,6 +18,7 @@ export interface WitnessState {
   failures: number;
   lastTickAt: string | null;
   lastTickOk: boolean;
+  lastVerifyOk: boolean;
   lastError: string | null;
   head: { seq: number; hash: string } | null;
   lastAnchor: { seq: number; head: string; logIndex: string; at: string } | null;
@@ -78,7 +79,7 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
 
   const state: WitnessState = {
     stream: cfg.stream, publicKey, log: { url: cfg.rekor.url, keyId: logKeyId }, intervalMs: cfg.intervalMs,
-    ticks: 0, anchored: 0, failures: 0, lastTickAt: null, lastTickOk: false, lastError: null, head: null, lastAnchor: null, lag: 0,
+    ticks: 0, anchored: 0, failures: 0, lastTickAt: null, lastTickOk: false, lastVerifyOk: false, lastError: null, head: null, lastAnchor: null, lag: 0,
   };
   meter.createObservableGauge("deadlatch.witness.lag").addCallback((r) => r.observe(state.lag, { stream: cfg.stream }));
 
@@ -97,8 +98,8 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
     if (!state.lastAnchor) return state.head.seq + 1;
     return Math.max(0, state.head.seq - state.lastAnchor.seq);
   }
-  function done(at: string, ok: boolean, error: string | null): void {
-    state.lastTickAt = at; state.lastTickOk = ok; state.lastError = error; state.lag = lagOf();
+  function done(at: string, ok: boolean, error: string | null, verified: boolean): void {
+    state.lastTickAt = at; state.lastTickOk = ok; state.lastVerifyOk = verified; state.lastError = error; state.lag = lagOf();
     if (!ok) { state.failures++; failuresCounter.add(1, { stream: cfg.stream }); }
   }
 
@@ -108,18 +109,18 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
     await tracer.startActiveSpan("deadlatch.witness.tick", async (span) => {
       try {
         const recs = await records();
-        if (recs.length === 0) { state.head = null; done(at, true, null); return; }
+        if (recs.length === 0) { state.head = null; done(at, true, null, true); return; }
         const chain = verifyChain(recs);
         if (!chain.ok) {
           const msg = `chain broken at ${chain.brokenAt} (${chain.id}): ${chain.reason}`;
           await event("chain-broken", msg);
-          done(at, false, msg);
+          done(at, false, msg, false);
           return;
         }
         const seq = recs.length - 1;
         const head = recs[seq]!.hash;
         state.head = { seq, hash: head };
-        if (state.lastAnchor && state.lastAnchor.seq === seq && state.lastAnchor.head === head) { done(at, true, null); return; }
+        if (state.lastAnchor && state.lastAnchor.seq === seq && state.lastAnchor.head === head) { done(at, true, null, true); return; }
         await tracer.startActiveSpan("deadlatch.witness.anchor", async (inner) => {
           try {
             const a = await rekor.submit(cfg.stream, seq, head, signer);
@@ -128,16 +129,16 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
             state.anchored++;
             anchorsCounter.add(1, { stream: cfg.stream });
             await event("anchored", `seq ${seq} head ${head} log index ${a.entry.logIndex}`);
-            done(at, true, null);
+            done(at, true, null, true);
           } catch (e) {
             const msg = (e as Error).message;
             const kind: WitnessEventKind = /unique|duplicate|exists/i.test(msg) ? "anchor-conflict" : "anchor-failed";
             await event(kind, msg);
-            done(at, false, msg);
+            done(at, false, msg, true);
           } finally { inner.end(); }
         });
       } catch (e) {
-        done(at, false, (e as Error).message);
+        done(at, false, (e as Error).message, false);
       } finally { span.end(); }
     });
   }
@@ -147,10 +148,10 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
     if (!state.lastTickAt) return { ok: false, reason: "no tick yet" };
     const nowMs = Date.parse(now());
     if (nowMs - Date.parse(state.lastTickAt) > window) return { ok: false, reason: "last tick is stale" };
-    if (!state.lastTickOk) return { ok: false, reason: state.lastError ?? "last tick failed" };
+    if (!state.lastVerifyOk) return { ok: false, reason: state.lastError ?? "last tick failed" };
     if (state.head && state.lastAnchor?.head !== state.head.hash) {
       const age = state.lastAnchor ? nowMs - Date.parse(state.lastAnchor.at) : Number.POSITIVE_INFINITY;
-      if (age > window) return { ok: false, reason: `head at seq ${state.head.seq} not anchored, ${state.lag} receipts behind` };
+      if (age > window) return { ok: false, reason: `head at seq ${state.head.seq} not anchored, ${state.lag} receipts behind${state.lastError ? `, last error ${state.lastError}` : ""}` };
     }
     return { ok: true };
   }

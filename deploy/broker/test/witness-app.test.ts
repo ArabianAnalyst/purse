@@ -89,7 +89,7 @@ test("a broken chain anchors nothing, records an event, and readiness goes red",
   assert.equal(rekor.submits, 1, "no anchor on a broken chain");
   const ev = await w.events();
   assert.equal(ev[ev.length - 1]?.kind, "chain-broken");
-  assert.match(ev[ev.length - 1]?.detail ?? "", /1/);
+  assert.match(ev[ev.length - 1]?.detail ?? "", /chain broken at 1 \(id-1\)/);
   assert.equal(w.ready().ok, false);
   await w.close();
 });
@@ -111,6 +111,28 @@ test("a Rekor failure records an event, keeps the head unanchored, and the next 
   assert.equal(s.lastTickOk, true);
   assert.equal(s.lastAnchor?.seq, 1);
   assert.equal(s.lag, 0);
+  assert.deepEqual(w.ready(), { ok: true });
+  await w.close();
+});
+
+test("a transient Rekor failure stays green while the last anchor is younger than the window, then goes red", async () => {
+  const { db, w, rekor, c } = await setup(2);
+  await w.tick();
+  await seedReceipts(db, "t", 1, 2);
+  rekor.status = 503;
+  await w.tick();
+  const s = w.state();
+  assert.equal(s.lastTickOk, false);
+  assert.equal(s.lastVerifyOk, true);
+  assert.equal(s.lag, 1);
+  assert.deepEqual(w.ready(), { ok: true }, "the last anchor is seconds old");
+  c.advance(2 * 60000 + 1);
+  await w.tick();
+  const r = w.ready();
+  assert.equal(r.ok, false);
+  assert.match(r.reason ?? "", /not anchored, 1 receipts behind/);
+  rekor.status = 201;
+  await w.tick();
   assert.deepEqual(w.ready(), { ok: true });
   await w.close();
 });
