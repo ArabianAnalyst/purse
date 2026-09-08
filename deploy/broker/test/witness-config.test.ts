@@ -58,6 +58,14 @@ test("numbers and the url are validated", () => {
   assert.deepEqual([c.intervalMs, c.maxLag, c.port, c.rekor.timeoutMs], [1000, 3, 9000, 20000]);
 });
 
+test("WITNESS_TRUSTED_KEYS is a trimmed, comma-separated list, empty entries dropped, default []", () => {
+  assert.deepEqual(loadWitnessConfig(base()).trustedKeys, []);
+  const k1 = ed();
+  const k2 = ed();
+  assert.deepEqual(loadWitnessConfig({ ...base(), WITNESS_TRUSTED_KEYS: `  ${k1} , ${k2}  ` }).trustedKeys, [k1, k2]);
+  assert.deepEqual(loadWitnessConfig({ ...base(), WITNESS_TRUSTED_KEYS: "" }).trustedKeys, []);
+});
+
 test("errors carry the prefix", () => {
   try { loadWitnessConfig({}); assert.fail("should throw"); }
   catch (e) { assert.ok(e instanceof WitnessConfigError); assert.match((e as Error).message, /^purse-witness config: /); }

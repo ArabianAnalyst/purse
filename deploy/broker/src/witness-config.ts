@@ -10,6 +10,8 @@ export interface WitnessConfig {
   /** The receipts table the broker writes. */
   table: string;
   key: { file?: string; pem?: string };
+  /** Earlier witness keys still trusted, so anchors they signed before a rotation still count. */
+  trustedKeys: string[];
   rekor: { url: string; logKey: { origin: string; publicKey: string }; timeoutMs: number };
   intervalMs: number;
   maxLag: number;
@@ -49,9 +51,11 @@ export function loadWitnessConfig(env: Env = process.env): WitnessConfig {
   if (!/^https?:\/\//.test(url)) throw new WitnessConfigError(`REKOR_URL must start with http:// or https://, got "${url}"`);
   if (!env.REKOR_LOG_KEY) throw new WitnessConfigError("REKOR_LOG_KEY is required, <origin>=<base64 SPKI DER> from Sigstore's trust root");
   const logKey = parseLogKey(env.REKOR_LOG_KEY);
+  const trustedKeys = (env.WITNESS_TRUSTED_KEYS ?? "").split(",").map((k) => k.trim()).filter((k) => k.length > 0);
   return {
     databaseUrl, stream, table: "receipts",
     key: { file, pem },
+    trustedKeys,
     rekor: { url, logKey, timeoutMs: int("REKOR_TIMEOUT_MS", env.REKOR_TIMEOUT_MS, 30000, 1000) },
     intervalMs: int("WITNESS_INTERVAL_MS", env.WITNESS_INTERVAL_MS, 300000, 1000),
     maxLag: int("WITNESS_MAX_LAG", env.WITNESS_MAX_LAG, 2, 1),

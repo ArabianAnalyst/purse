@@ -29,7 +29,7 @@ export function createWitnessServer(w: Witness, cfg: WitnessConfig): Server {
   const nonNegative = (v: string | null): number | null => {
     if (v == null || v === "") return -1;
     const n = Number(v);
-    return Number.isInteger(n) && n >= -1 ? n : null;
+    return Number.isInteger(n) && n >= -1 && n <= Number.MAX_SAFE_INTEGER ? n : null;
   };
   return createServer(async (req, res) => {
     try {

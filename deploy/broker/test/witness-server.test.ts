@@ -39,12 +39,14 @@ test("the witness port: index, anchors, verify, events, health, readiness, and n
     assert.equal((an.json.anchors as unknown[]).length, 1);
     assert.equal(((await get(`${srv.url}/anchors?since=2`)).json.anchors as unknown[]).length, 0);
     assert.equal((await get(`${srv.url}/anchors?since=x`)).status, 400);
+    assert.equal((await get(`${srv.url}/anchors?since=99999999999999999999`)).status, 400);
     const v = await get(`${srv.url}/verify`);
     assert.equal(v.status, 200);
     assert.equal(v.json.ok, true);
     assert.equal(v.json.coveredUpTo, 2);
     const ev = await get(`${srv.url}/events`);
     assert.equal((ev.json.events as { kind: string }[])[0]?.kind, "anchored");
+    assert.equal((await get(`${srv.url}/events?since=99999999999999999999`)).status, 400);
     assert.deepEqual((await get(`${srv.url}/healthz`)).json, { ok: true });
     assert.equal((await get(`${srv.url}/readyz`)).status, 200);
     c.advance(3 * cfg.intervalMs);

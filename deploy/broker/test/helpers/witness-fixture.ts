@@ -20,6 +20,7 @@ export function witnessCfg(rekor: FakeRekor, over: Partial<WitnessConfig> = {}):
   return {
     databaseUrl: "postgres://unused", stream: "t", table: "receipts",
     key: { pem: undefined, file: undefined },
+    trustedKeys: [],
     rekor: { url: rekor.url, logKey: rekor.logKey, timeoutMs: 5000 },
     intervalMs: 60000, maxLag: 2, port: 0, bind: "127.0.0.1", otel: false,
     ...over,

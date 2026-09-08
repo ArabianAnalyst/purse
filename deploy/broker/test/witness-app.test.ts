@@ -151,17 +151,124 @@ test("readiness follows the lag rule on the clock", async () => {
   await w.close();
 });
 
-test("an anchor row that already exists for the head's seq is recorded as a conflict, not a crash", async () => {
+/** A syntactically well-formed but foreign Anchor JSON, for the pre-submit conflict tests. */
+function foreignAnchor(seq: number, head: string, publicKey = "foreign-witness-key"): string {
+  return JSON.stringify({
+    v: 1, stream: "t", seq, head, at: "2026-01-01T00:00:00.000Z",
+    witness: { alg: "ecdsa-p256", publicKey },
+    signature: "AA==",
+    log: { url: "https://foreign.example", keyId: "foreign-log" },
+    entry: { logIndex: "0", canonicalizedBody: "AA==" },
+    proof: { logIndex: "0", treeSize: "1", rootHash: "AA==", hashes: [], checkpoint: "foreign checkpoint" },
+  });
+}
+
+test("a foreign anchor row already at the head's seq, for a different head, is a conflict caught before submitting", async () => {
   const { db, w, rekor } = await setup(2);
-  // Another witness (or a stale row) got there first for seq 1, with a different head.
-  await db.query("INSERT INTO anchors (stream, seq, head, at, record) VALUES ('t', 1, repeat('0', 64), now(), '{}')");
+  // Another witness got there first for seq 1, with a different head.
+  await db.query("INSERT INTO anchors (stream, seq, head, at, record) VALUES ('t', 1, repeat('0', 64), now(), $1)", [foreignAnchor(1, "0".repeat(64))]);
   await w.tick();
-  const s = w.state();
-  assert.equal(s.lastTickOk, false);
-  assert.equal(rekor.submits, 1, "the submit happened, the append was refused");
+  await w.tick();
+  await w.tick();
+  assert.equal(rekor.submits, 0, "the conflict is caught before submitting");
   const ev = await w.events();
-  assert.equal(ev[ev.length - 1]?.kind, "anchor-conflict");
+  const conflicts = ev.filter((e) => e.kind === "anchor-conflict");
+  assert.equal(conflicts.length, 1, "the conflict is logged once, not every tick");
+  assert.match(conflicts[0]?.detail ?? "", /an anchor for a different head/);
+  assert.equal(w.state().lastTickOk, false);
   assert.equal(w.ready().ok, false);
+  await seedReceipts(db, "t", 1, 2);
+  await w.tick();
+  assert.equal(rekor.submits, 1);
+  assert.equal(w.state().lastAnchor?.seq, 2);
+  await w.close();
+});
+
+test("a row anchored by another witness with the same key is adopted, not resubmitted", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 2);
+  const rekor = new FakeRekor();
+  const c = clock();
+  const signer = P256Signer.generate();
+  const cfg = witnessCfg(rekor);
+  const A = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer });
+  await A.tick();
+  assert.equal(A.state().lastAnchor?.seq, 1);
+  const before = rekor.submits;
+  const B = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer });
+  await B.tick();
+  assert.equal(rekor.submits, before, "B adopted A's anchor instead of resubmitting");
+  assert.equal(B.state().lastAnchor?.seq, 1);
+  await A.close();
+  await B.close();
+});
+
+test("a row anchored by an untrusted key is a conflict until the next receipt", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 2);
+  const rekor = new FakeRekor();
+  const c = clock();
+  const SA = P256Signer.generate();
+  const SB = P256Signer.generate();
+  const cfg = witnessCfg(rekor);
+  const A = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer: SA });
+  await A.tick();
+  assert.equal(A.state().lastAnchor?.seq, 1);
+  const B = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer: SB });
+  await B.tick();
+  const conflicts = (await B.events()).filter((e) => e.kind === "anchor-conflict");
+  assert.equal(conflicts.length, 1);
+  assert.match(conflicts[0]?.detail ?? "", /untrusted witness key/);
+  assert.equal(B.ready().ok, false);
+  await seedReceipts(db, "t", 1, 2);
+  await B.tick();
+  assert.equal(B.state().lastAnchor?.seq, 2);
+  assert.equal(B.ready().ok, true);
+  await A.close();
+  await B.close();
+});
+
+test("WITNESS_TRUSTED_KEYS makes an earlier key's anchors count", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 2);
+  const rekor = new FakeRekor();
+  const c = clock();
+  const SA = P256Signer.generate();
+  const SB = P256Signer.generate();
+  const A = await createWitness(witnessCfg(rekor), { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer: SA });
+  await A.tick();
+  assert.equal(A.state().lastAnchor?.seq, 1);
+  const cfgB = witnessCfg(rekor, { trustedKeys: [SA.publicKeyDer()] });
+  const B = await createWitness(cfgB, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer: SB });
+  await B.tick();
+  const conflicts = (await B.events()).filter((e) => e.kind === "anchor-conflict");
+  assert.equal(conflicts.length, 0);
+  assert.equal(B.state().lastAnchor?.seq, 1);
+  const v = await B.verify();
+  assert.equal(v.ok, true);
+  assert.equal(v.coveredUpTo, 1);
+  await A.close();
+  await B.close();
+});
+
+test("a malformed anchor row neither crashes boot nor verify", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 1);
+  await db.query("CREATE TABLE IF NOT EXISTS anchors (n BIGSERIAL PRIMARY KEY, stream TEXT NOT NULL, seq BIGINT NOT NULL, head TEXT NOT NULL, at TIMESTAMPTZ NOT NULL, record TEXT NOT NULL, UNIQUE (stream, seq))");
+  await db.query("INSERT INTO anchors (stream, seq, head, at, record) VALUES ('t', 0, repeat('0', 64), now(), '{}')");
+  const rekor = new FakeRekor();
+  const c = clock();
+  const signer = P256Signer.generate();
+  const w = await createWitness(witnessCfg(rekor), { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer });
+  assert.equal(w.state().lastAnchor, null);
+  const v = await w.verify();
+  assert.equal(v.coveredUpTo, null);
+  await w.tick();
+  const ev = await w.events();
+  assert.equal(ev.filter((e) => e.kind === "anchor-conflict").length, 1);
+  await seedReceipts(db, "t", 1, 1);
+  await w.tick();
+  assert.equal(w.state().lastAnchor?.seq, 1);
   await w.close();
 });
 
