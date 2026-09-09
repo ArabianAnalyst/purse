@@ -81,6 +81,18 @@ test("payee-velocity fires on the fifth execution to one payee inside ten minute
   assert.deepEqual(ids([...mints, ...mixed]), []);
 });
 
+test("payee-velocity counts only executions at or before the record's own receipt time, so a later-timestamped record already in the window cannot inflate an earlier one", () => {
+  const mints = Array.from({ length: 5 }, (_, i) => rec(i + 1, "grant_minted", { grant: `g${i + 1}`, minute: 0 }));
+  // four executions timestamped minutes 20 to 23 are already in the window
+  const later = Array.from({ length: 4 }, (_, i) => rec(11 + i, "executed", { grant: `g${i + 1}`, minute: 20 + i }));
+  // the record under evaluation is the last one appended but carries an earlier timestamp, minute 15
+  const earlier = rec(15, "executed", { grant: "g5", minute: 15 });
+  assert.deepEqual(ids([...mints, ...later, earlier]), []);
+  // the same record timestamped after the four trips the rule
+  const latest = rec(15, "executed", { grant: "g5", minute: 24 });
+  assert.deepEqual(ids([...mints, ...later, latest]), ["payee-velocity"]);
+});
+
 test("loadExpectations applies MONITOR_DISABLE and rejects an unknown id", async () => {
   const some = await loadExpectations({ velocity: { count: 5, ms: 600_000 }, disable: ["executed-once", "payee-velocity"], expectationsModule: undefined });
   assert.deepEqual(some.map((e) => e.id), ["executed-without-grant", "paid-matches-decision"]);
