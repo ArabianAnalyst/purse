@@ -52,6 +52,7 @@ export function monitorCfg(over: Partial<MonitorConfig> = {}): MonitorConfig {
     intervalMs: 60_000,
     window: { count: 500, ms: 24 * 60 * 60_000 },
     velocity: { count: 5, ms: 10 * 60_000 },
+    maxBehind: 2500,
     disable: [], expectationsModule: undefined,
     deadlatch: { url: "https://deadlatch.test", projectKey: "dl_live_aaaaaaaabbbb" },
     flagsFile: join(dir, "flags.jsonl"),

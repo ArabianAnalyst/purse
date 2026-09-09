@@ -36,7 +36,7 @@ test("the four built-ins carry the spec's ids and reasons", () => {
   assert.deepEqual(exps.map((e) => e.reason), [
     "An execution happened for a grant this window never saw minted.",
     "A single-use grant executed twice.",
-    "The rail settled a different amount than the decision allowed.",
+    "The rail settled more than the decision allowed.",
     "The same payee was paid too many times too quickly.",
   ]);
 });
@@ -59,10 +59,11 @@ test("executed-once fires on a second execution of the same grant and not on a d
   assert.deepEqual(ids([...minted, rec(3, "execution_failed", { grant: "g1" }), rec(4, "executed", { grant: "g1" })]), []);
 });
 
-test("paid-matches-decision holds on the minted amount and currency, fires on a different amount or currency, and holds with no settled amount or no minted record", () => {
+test("paid-matches-decision holds at or below the minted amount in the same currency, fires above it or in another currency, and holds with no settled amount or no minted record", () => {
   const minted = rec(1, "grant_minted", { grant: "g1", amount: 1250 });
   assert.deepEqual(ids([minted, rec(2, "executed", { grant: "g1", paid: 1250 })]), []);
-  assert.deepEqual(ids([minted, rec(2, "executed", { grant: "g1", paid: 1200 })]), ["paid-matches-decision"]);
+  assert.deepEqual(ids([minted, rec(2, "executed", { grant: "g1", paid: 1200 })]), [], "a settlement below the ceiling is the normal x402 case");
+  assert.deepEqual(ids([minted, rec(2, "executed", { grant: "g1", paid: 1300 })]), ["paid-matches-decision"]);
   assert.deepEqual(ids([minted, rec(2, "executed", { grant: "g1", paid: 1250, paidCurrency: "EUR" })]), ["paid-matches-decision"]);
   assert.deepEqual(ids([minted, rec(2, "executed", { grant: "g1" })]), []);
   assert.deepEqual(ids([rec(2, "executed", { grant: "g1", paid: 99 })]), ["executed-without-grant"]);

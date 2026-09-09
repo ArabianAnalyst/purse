@@ -17,6 +17,8 @@ export function createMonitorServer(app: MonitorApp, cfg: MonitorConfig): Server
       dashboard: s.keyPrefix ? `${cfg.deadlatch.url}/app` : null,
       flagsFile: s.sink === "file" ? cfg.flagsFile : null,
       cursor: s.cursor,
+      headSeq: s.headSeq,
+      behind: s.behind,
       window: s.window,
       windowCount: s.windowCount,
       intervalMs: s.intervalMs,
@@ -31,7 +33,7 @@ export function createMonitorServer(app: MonitorApp, cfg: MonitorConfig): Server
         "GET /flags?since=<n>": "flags this monitor stored, oldest first, at most one thousand",
         "GET /events?since=<n>": "skipped, push-failed, push-rejected, dropped, heartbeat-failed, error",
         "GET /healthz": "liveness",
-        "GET /readyz": "200 only when the last tick succeeded within three intervals and the last push succeeded or had nothing to push",
+        "GET /readyz": "200 only when the last tick succeeded within three intervals, the last push succeeded or had nothing to push, and the cursor is within MONITOR_MAX_BEHIND of the head",
       },
     };
   };

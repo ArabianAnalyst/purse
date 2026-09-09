@@ -49,6 +49,8 @@ test("GET / describes the monitor without the key, and readiness follows the tic
   assert.equal(root.body.dashboard, "https://deadlatch.test/app");
   assert.deepEqual(root.body.window, { count: 500, ms: 86_400_000 });
   assert.equal(root.body.intervalMs, 60_000);
+  assert.equal(root.body.headSeq, null);
+  assert.equal(root.body.behind, 0);
   assert.equal(JSON.stringify(root.body).includes("dl_live_"), false, "the key never appears");
   assert.ok(typeof root.body.routes === "object");
   assert.deepEqual(await get("/readyz"), { status: 200, body: { ok: true } });

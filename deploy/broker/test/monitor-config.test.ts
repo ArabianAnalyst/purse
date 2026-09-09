@@ -11,6 +11,7 @@ test("defaults", () => {
   assert.equal(c.intervalMs, 60000);
   assert.deepEqual(c.window, { count: 500, ms: 24 * 60 * 60 * 1000 });
   assert.deepEqual(c.velocity, { count: 5, ms: 10 * 60 * 1000 });
+  assert.equal(c.maxBehind, 2500);
   assert.deepEqual(c.disable, []);
   assert.equal(c.expectationsModule, undefined);
   assert.deepEqual(c.deadlatch, { url: "https://www.deadlatch.dev", projectKey: undefined });
@@ -69,6 +70,8 @@ test("integers are validated with their floor", () => {
   assert.throws(() => loadMonitorConfig({ ...base(), MONITOR_INTERVAL_MS: "500" }), /MONITOR_INTERVAL_MS must be an integer of at least 1000/);
   assert.throws(() => loadMonitorConfig({ ...base(), MONITOR_PORT: "-1" }), /MONITOR_PORT must be an integer of at least 0/);
   assert.equal(loadMonitorConfig({ ...base(), MONITOR_PORT: "0" }).port, 0);
+  assert.throws(() => loadMonitorConfig({ ...base(), MONITOR_MAX_BEHIND: "-1" }), /MONITOR_MAX_BEHIND must be an integer of at least 0/);
+  assert.equal(loadMonitorConfig({ ...base(), MONITOR_MAX_BEHIND: "0" }).maxBehind, 0);
 });
 
 test("otel is on only when the OTLP endpoint is set", () => {

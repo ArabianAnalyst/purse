@@ -13,6 +13,8 @@ export interface MonitorConfig {
   intervalMs: number;
   window: Span;
   velocity: Span;
+  /** Readiness goes red when the cursor is more than this many receipts behind the chain head. 0 switches the check off. */
+  maxBehind: number;
   /** Built-in expectation ids switched off. */
   disable: string[];
   /** Path to an ES module whose default export is an Expectation[]. */
@@ -59,6 +61,7 @@ export function loadMonitorConfig(env: Env = process.env): MonitorConfig {
     intervalMs: int("MONITOR_INTERVAL_MS", env.MONITOR_INTERVAL_MS, 60000, 1000),
     window: parseSpan("MONITOR_WINDOW", env.MONITOR_WINDOW ?? "500/24h"),
     velocity: parseSpan("MONITOR_VELOCITY", env.MONITOR_VELOCITY ?? "5/10m"),
+    maxBehind: int("MONITOR_MAX_BEHIND", env.MONITOR_MAX_BEHIND, 2500, 0),
     disable,
     expectationsModule: env.MONITOR_EXPECTATIONS || undefined,
     deadlatch: { url, projectKey },

@@ -22,6 +22,10 @@ export interface MonitorAppState {
   /** The first eight characters of the project key after dl_live_, or null without a key. */
   keyPrefix: string | null;
   cursor: Cursor | null;
+  /** The highest seq in the stream at the last read, null before the first read or on an empty stream. */
+  headSeq: number | null;
+  /** Receipts between the cursor and the head, 0 when nothing is unread. */
+  behind: number;
   ticks: number;
   lastTickAt: string | null;
   lastTickOk: boolean;
@@ -32,7 +36,11 @@ export interface MonitorAppState {
   flags: number;
   windowCount: number;
 }
-export interface MonitorAppOverrides { sqlClient?: SqlClient; fetch?: typeof fetch; now?: () => string; expectations?: Expectation[] }
+export interface MonitorAppOverrides {
+  sqlClient?: SqlClient; fetch?: typeof fetch; now?: () => string; expectations?: Expectation[];
+  /** Receipts per tick, tests only. Default READ_LIMIT. */
+  readLimit?: number;
+}
 export interface MonitorApp {
   state(): MonitorAppState;
   tick(): Promise<void>;
@@ -55,6 +63,7 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
   const pool = overrides.sqlClient ? null : new pg.Pool({ connectionString: cfg.databaseUrl });
   const sql: SqlClient = overrides.sqlClient ?? (pool as unknown as SqlClient);
   const now = overrides.now ?? (() => new Date().toISOString());
+  const readLimit = overrides.readLimit ?? READ_LIMIT;
   for (const statement of SCHEMA) await sql.query(statement);
   const expectations = overrides.expectations ?? (await loadExpectations(cfg));
 
@@ -63,7 +72,7 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
   const flagCounter = meter.createCounter("deadlatch.watch.flag");
   const pushFailedCounter = meter.createCounter("deadlatch.watch.push.failed");
 
-  const st = { ticks: 0, lastError: null as string | null };
+  const st = { ticks: 0, lastError: null as string | null, headSeq: null as number | null };
 
   // Events are remembered during a tick and written after it, so the engine's synchronous listener never touches the database.
   const remembered: Array<{ kind: string; detail: string }> = [];
@@ -92,7 +101,9 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
   const toRecords = fromReceipts<unknown>(cfg.stream, purseRecord);
   const source: Source = {
     async next(cursor) {
-      const { rows } = await sql.query(`SELECT seq, record FROM ${cfg.table} WHERE stream = $1 AND seq > $2 ORDER BY seq LIMIT ${READ_LIMIT}`, [cfg.stream, cursor?.seq ?? 0]);
+      const head = await sql.query(`SELECT max(seq) AS head FROM ${cfg.table} WHERE stream = $1`, [cfg.stream]);
+      st.headSeq = head.rows[0]?.head == null ? null : Number(head.rows[0].head);
+      const { rows } = await sql.query(`SELECT seq, record FROM ${cfg.table} WHERE stream = $1 AND seq > $2 ORDER BY seq LIMIT ${readLimit}`, [cfg.stream, cursor?.seq ?? 0]);
       const receipts: Array<ReceiptLike<unknown> & { seq: number }> = [];
       const unparsed: Skipped[] = [];
       for (const r of rows) {
@@ -149,6 +160,12 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
   const monitor: Monitor = createMonitor({ source, expectations, sink, cursorStore, window: cfg.window, intervalMs: cfg.intervalMs, now: () => new Date(now()), onEvent });
   meter.createObservableGauge("deadlatch.watch.queued").addCallback((r) => r.observe(monitor.state().queued, { stream: cfg.stream }));
 
+  function behind(): number {
+    if (st.headSeq === null) return 0;
+    const cursor = monitor.state().cursor;
+    return Math.max(0, st.headSeq - (cursor?.seq ?? 0));
+  }
+
   async function tick(): Promise<void> {
     st.ticks++;
     await tracer.startActiveSpan("deadlatch.watch.tick", async (span) => {
@@ -163,6 +180,7 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
     if (Date.parse(now()) - Date.parse(s.lastTickAt) > 3 * cfg.intervalMs) return { ok: false, reason: "last tick is stale" };
     if (!s.lastTickOk) return { ok: false, reason: st.lastError ?? "last tick failed" };
     if (!s.lastPushOk) return { ok: false, reason: `last push failed, ${s.queued} flags queued${st.lastError ? `, ${st.lastError}` : ""}` };
+    if (cfg.maxBehind > 0 && behind() > cfg.maxBehind) return { ok: false, reason: `behind by ${behind()} receipts, more than MONITOR_MAX_BEHIND ${cfg.maxBehind}` };
     return { ok: true };
   }
 
@@ -172,7 +190,8 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
       return {
         stream: cfg.stream, version: VERSION, intervalMs: cfg.intervalMs, window: { ...cfg.window },
         sink: key ? "deadlatch" : "file", keyPrefix,
-        cursor: s.cursor, ticks: st.ticks,
+        cursor: s.cursor, headSeq: st.headSeq, behind: behind(),
+        ticks: st.ticks,
         lastTickAt: s.lastTickAt, lastTickOk: s.lastTickOk, lastPushOk: s.lastPushOk, lastPushAt: s.lastPushAt,
         lastError: st.lastError, queued: s.queued, flags: s.flags, windowCount: s.window.count,
       };

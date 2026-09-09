@@ -61,6 +61,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      broker:
+        condition: service_healthy
     environment:
       DATABASE_URL: postgres://purse:purse@postgres:5432/purse
       MONITOR_STREAM: ${PURSE_STREAM:-purse}

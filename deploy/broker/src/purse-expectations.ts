@@ -42,7 +42,7 @@ export function builtinExpectations(velocity: Span): Expectation[] {
     },
     {
       id: "paid-matches-decision",
-      reason: "The rail settled a different amount than the decision allowed.",
+      reason: "The rail settled more than the decision allowed.",
       where: { action: "executed" },
       must: (r, trace) => {
         const paid = metaOf(r).paidAmount;
@@ -51,7 +51,7 @@ export function builtinExpectations(velocity: Span): Expectation[] {
         const minted = mintedFor(trace, g);
         const want = minted ? amountOf(minted) : undefined;
         if (!want) return true;
-        return paid.amount === want.amount && paid.currency === want.currency;
+        return paid.amount <= want.amount && paid.currency === want.currency;
       },
     },
     {

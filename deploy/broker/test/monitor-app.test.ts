@@ -30,6 +30,8 @@ test("boot creates the tables, and an empty stream ticks green with no cursor ro
   assert.equal(s.lastTickOk, true);
   assert.equal(s.cursor, null);
   assert.equal(await cursorRow(db), null);
+  assert.equal(app.state().headSeq, null);
+  assert.equal(app.state().behind, 0);
   assert.deepEqual(app.ready(), { ok: true });
   assert.equal(hosted.heartbeats().length, 1);
   assert.deepEqual(hosted.heartbeats()[0]?.body, { version: VERSION, stream: "t", intervalMs: 60_000, cursor: null, lastFlagAt: null });
@@ -46,6 +48,8 @@ test("a clean stream advances the cursor, stores no flags, and pushes nothing", 
   await app.tick();
   assert.deepEqual(app.state().cursor, { seq: 2 });
   assert.equal(await cursorRow(db), "2");
+  assert.equal(app.state().headSeq, 2);
+  assert.equal(app.state().behind, 0);
   assert.deepEqual(await app.flags(), []);
   assert.equal(hosted.flagsCalls().length, 0);
   assert.deepEqual(hosted.heartbeats()[0]?.body, { version: VERSION, stream: "t", intervalMs: 60_000, cursor: { seq: 2 }, lastFlagAt: null });
@@ -150,8 +154,11 @@ test("the source reads at most READ_LIMIT receipts per tick", async () => {
   await seedDecisions(db, "t", payloads);
   await app.tick();
   assert.deepEqual(app.state().cursor, { seq: READ_LIMIT });
+  assert.equal(app.state().headSeq, READ_LIMIT + 1);
+  assert.equal(app.state().behind, 1);
   await app.tick();
   assert.deepEqual(app.state().cursor, { seq: READ_LIMIT + 1 });
+  assert.equal(app.state().behind, 0);
   await app.close();
 });
 
@@ -211,5 +218,33 @@ test("a custom expectation from a module flags alongside the built-ins", async (
   await seedDecisions(db, "t", [minted("g1"), executed("g1", { paid: 1250 })]);
   await app.tick();
   assert.deepEqual((await app.flags()).map((f) => f.flag.expectation.id), ["small-only"]);
+  await app.close();
+});
+
+test("readiness goes red when the cursor falls further behind the head than MONITOR_MAX_BEHIND, and recovers as it catches up", async () => {
+  const db = new PGlite();
+  await ensureReceipts(db, "t");
+  const hosted = fakeDeadlatch();
+  const c = clock("2026-09-09T01:00:00.000Z");
+  const app = await createMonitorApp(monitorCfg({ maxBehind: 2 }), { sqlClient: db as unknown as SqlClient, fetch: hosted.fetch, now: c.now, readLimit: 2 });
+  await seedDecisions(db, "t", Array.from({ length: 5 }, (_, i) => minted(`g${i}`)));
+  await app.tick();
+  assert.deepEqual(app.state().cursor, { seq: 2 });
+  assert.equal(app.state().headSeq, 5);
+  assert.equal(app.state().behind, 3);
+  assert.deepEqual(app.ready(), { ok: false, reason: "behind by 3 receipts, more than MONITOR_MAX_BEHIND 2" });
+  await app.tick();
+  assert.equal(app.state().behind, 1);
+  assert.deepEqual(app.ready(), { ok: true });
+  // A second PGlite, not the shared db, so this app's cursor starts empty instead of picking up
+  // the first app's saved cursor for stream "t" (they would otherwise share the cursor row).
+  const db2 = new PGlite();
+  await ensureReceipts(db2, "t");
+  await seedDecisions(db2, "t", Array.from({ length: 5 }, (_, i) => minted(`g${i}`)));
+  const off = await createMonitorApp(monitorCfg({ maxBehind: 0 }), { sqlClient: db2 as unknown as SqlClient, fetch: hosted.fetch, now: c.now, readLimit: 1 });
+  await off.tick();
+  assert.equal(off.state().behind, 4);
+  assert.deepEqual(off.ready(), { ok: true });
+  await off.close();
   await app.close();
 });

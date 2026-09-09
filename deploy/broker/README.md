@@ -1,6 +1,6 @@
 # Purse broker
 
-Purse enforcement mode as a container. An agent asks the broker for a spend, the broker decides against policy, performs the payment itself, and writes a hash-chained receipt to Postgres that anyone can verify without trusting the broker. Two ports. The agent port speaks HTTP and MCP and holds no secret. The admin port takes a bearer token and is for the principal.
+Purse enforcement mode as a container. An agent asks the broker for a spend, the broker decides against policy, performs the payment itself, and writes a hash-chained receipt to Postgres that anyone can verify without trusting the broker. Four ports, agent, admin, witness and monitor. The agent port speaks HTTP and MCP and holds no secret. The admin port takes a bearer token and is for the principal.
 
 ## Run it in under an hour
 
@@ -16,7 +16,7 @@ Only have the image? Point it at your own Postgres and skip straight to routing 
 
 ```bash
 docker run -e DATABASE_URL=... -e PURSE_ADMIN_TOKEN=... -e PURSE_MAX_PER_ACTION='$50' -e PURSE_ALLOW=api.stripe.com \
-  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.1.0
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.0
 ```
 
 1. Start it.
@@ -125,6 +125,7 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `MONITOR_INTERVAL_MS` | `60000` | How often the monitor reads new receipts. |
 | `MONITOR_WINDOW` | `500/24h` | The sliding window, `<count>/<duration>` with the duration in `m`, `h` or `d`. |
 | `MONITOR_VELOCITY` | `5/10m` | The `payee-velocity` threshold, `<count>/<duration>`. |
+| `MONITOR_MAX_BEHIND` | `2500` | Readiness goes red when the cursor is more than this many receipts behind the chain head. `0` switches the check off. |
 | `MONITOR_DISABLE` | | Comma-separated built-in ids to switch off. |
 | `MONITOR_EXPECTATIONS` | | Path to an ES module whose default export is an array of expectations. |
 | `DEADLATCH_URL` | `https://www.deadlatch.dev` | Where flags and heartbeats go. |
@@ -211,10 +212,10 @@ Four expectations are built in, each defined only over fields the chain carries.
 |---|---|
 | `executed-without-grant` | an `executed` receipt names a grant the window never saw minted, or no grant at all |
 | `executed-once` | two `executed` receipts in the window share a grant |
-| `paid-matches-decision` | the rail settled a different amount or currency than the minted decision allowed |
+| `paid-matches-decision` | the rail settled more than the minted decision allowed, or in another currency |
 | `payee-velocity` | the same payee was executed `MONITOR_VELOCITY` times or more inside its duration, default `5/10m` |
 
-The window must be at least as long as a grant lives for the first one to mean anything. `MONITOR_WINDOW` defaults to `500/24h`, five hundred receipts or one day, whichever ends first. Switch a built-in off by naming it in `MONITOR_DISABLE`. Add your own by pointing `MONITOR_EXPECTATIONS` at an ES module whose default export is an array of expectations, the same shape `@olurabian/tripwire` scans with. An id that collides with a built-in is a boot error.
+The window must be at least as long as a grant lives, and hold more receipts than the broker writes in that time, for the first rule to mean anything. A grant lives `PURSE_GRANT_TTL_MS`, fifteen minutes by default, and a broker writes about two receipts per request, so raise the count in `MONITOR_WINDOW` on a busy stream. `MONITOR_WINDOW` defaults to `500/24h`, five hundred receipts or one day, whichever ends first. Switch a built-in off by naming it in `MONITOR_DISABLE`. Add your own by pointing `MONITOR_EXPECTATIONS` at an ES module whose default export is an array of expectations, the same shape `@olurabian/tripwire` scans with. An id that collides with a built-in is a boot error.
 
 Three lines connect it to a Deadlatch project. The project's settings page prints them with the key filled in.
 
@@ -228,13 +229,25 @@ Without a key the monitor still runs. Flags go to `MONITOR_FLAGS_FILE`, one JSON
 
 ```sh
 curl -s http://127.0.0.1:8083/            # what it watches, the key prefix, the cursor, the last tick and push
-curl -s http://127.0.0.1:8083/flags       # every flag this monitor stored, oldest first
-curl -s http://127.0.0.1:8083/readyz      # 200 when the last tick succeeded within three intervals and the last push succeeded or had nothing to push
+curl -s http://127.0.0.1:8083/flags       # flags this monitor stored, oldest first, at most a thousand, page with ?since=<n>
+curl -s http://127.0.0.1:8083/readyz      # Readiness on the monitor port, `GET /readyz`, is 200 when the last tick succeeded within three intervals, the last push succeeded or there was nothing to push, and the cursor is within `MONITOR_MAX_BEHIND` of the head.
+```
+
+To see a flag on a fresh broker, trip the velocity rule through the agent port. Five spends of `$12.50` to `api.stripe.com` clear every default policy gate and land inside ten minutes, so the fifth execution flags `payee-velocity` on the next tick.
+
+```sh
+for i in 1 2 3 4 5; do
+  grantId=$(curl -s localhost:8080/request -H 'content-type: application/json' \
+    -d '{"amount":"$12.50","payee":"api.stripe.com","intent":"credits"}' | jq -r .grantId)
+  curl -s localhost:8080/execute -H 'content-type: application/json' -d "{\"grantId\":\"$grantId\"}"
+done
+sleep 60
+curl -s http://127.0.0.1:8083/flags
 ```
 
 `GET /events` names what went wrong, a skipped row, a failed or rejected push, a revoked key. A revoked or unknown key stops the monitor; fix the key and restart it.
 
-Limits. The monitor reads at most five hundred receipts per tick, so a stream that grows faster than that per interval falls behind and readiness says so. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. The monitor is not part of proof. The witness is.
+Limits. The monitor reads at most five hundred receipts per tick. `GET /` shows `headSeq` and `behind`, and readiness goes red once `behind` passes `MONITOR_MAX_BEHIND`, so a stream that grows faster than the monitor reads is visible, not silent. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. Flags beyond the hosted sink's queue of a thousand in one tick are dropped from delivery with a `dropped` event and stay in `monitor_flags`, which a monitor attached to a long existing chain should expect on its first ticks. The monitor is not part of proof. The witness is.
 
 ## Where each port may be reached from
 
@@ -245,7 +258,7 @@ The enforcement property only holds under the deployment contract in the Purse t
 - The wallet key reaches the broker as a mounted secret. Nothing in the agent's runtime holds a rail credential.
 - The agent has no other payment tool and no direct access to the rail. If it can pay some other way, the broker is not a boundary, it is a suggestion.
 - The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret. Still, put it behind your own network boundary unless you mean to publish it.
-- The monitor port is read-only like the witness port. It shows the first eight characters of the project key and nothing else secret. Same rule, your own boundary unless you mean to publish it.
+- The monitor port is read-only like the witness port. It shows the first eight characters of the project key after `dl_live_` and nothing else secret. Same rule, your own boundary unless you mean to publish it.
 
 ## Known limits
 
