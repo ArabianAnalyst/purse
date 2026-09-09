@@ -30,3 +30,10 @@ export function errorStatus(e: unknown): number {
 export function publicError(e: unknown): string {
   return /degraded/i.test((e as Error)?.message ?? "") ? "store degraded; see the admin port readiness" : "internal error";
 }
+
+/** A `since` query value. -1 when absent, the integer when it is a non-negative safe integer (or -1), null otherwise. */
+export function sinceParam(v: string | null): number | null {
+  if (v == null || v === "") return -1;
+  const n = Number(v);
+  return Number.isInteger(n) && n >= -1 && n <= Number.MAX_SAFE_INTEGER ? n : null;
+}
