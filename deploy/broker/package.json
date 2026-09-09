@@ -1,6 +1,6 @@
 {
   "name": "purse-broker",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Purse enforcement mode as a container. Agent port with HTTP and MCP, token-protected admin port, Postgres receipts, telemetry on by default.",
   "type": "module",
@@ -18,6 +18,7 @@
     "@olurabian/deadlatch-otel": "^0.2.0",
     "@olurabian/purse": "^0.4.0",
     "@olurabian/receipt": "^0.3.0",
+    "@olurabian/tripwire": "^0.2.0",
     "@opentelemetry/api": "^1.9.0",
     "@opentelemetry/exporter-metrics-otlp-http": "^0.200.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.200.0",
