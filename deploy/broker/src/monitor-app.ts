@@ -136,7 +136,12 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
       // No cursor yet and the operator did not ask for history. Start at the head, durably, and say so.
       const head = await sql.query(`SELECT max(seq) AS head FROM ${cfg.table} WHERE stream = $1`, [cfg.stream]);
       const h = head.rows[0]?.head;
-      if (h == null) return null;
+      if (h == null) {
+        const empty = { seq: 0 };
+        await saveCursor(empty);
+        remember("started", `no cursor for stream ${cfg.stream}, empty chain, starting at seq 0 (MONITOR_START=head)`);
+        return empty;
+      }
       const cursor = { seq: Number(h) };
       await saveCursor(cursor);
       remember("started", `no cursor for stream ${cfg.stream}, starting at head seq ${cursor.seq} (MONITOR_START=head)`);

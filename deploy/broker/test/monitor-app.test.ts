@@ -265,11 +265,12 @@ test("with MONITOR_START head, a monitor with no cursor starts at the head, judg
   await app.close();
 });
 
-test("with MONITOR_START head on an empty stream, the cursor stays null and the first receipt is judged", async () => {
+test("with MONITOR_START head on an empty stream, the cursor is written at seq 0, recorded, and the first receipt is judged", async () => {
   const { db, app } = await setup({}, { start: "head" });
   await app.tick();
-  assert.equal(app.state().cursor, null);
-  assert.deepEqual(await app.events(), []);
+  assert.deepEqual(app.state().cursor, { seq: 0 });
+  assert.deepEqual((await app.events()).map((e) => [e.kind, e.detail]), [["started", "no cursor for stream t, empty chain, starting at seq 0 (MONITOR_START=head)"]]);
+  assert.equal(await cursorRow(db), "0");
   await seedDecisions(db, "t", [executed("g9")]);
   await app.tick();
   assert.deepEqual((await app.flags()).map((f) => f.flag.offender.ref.seq), [1]);

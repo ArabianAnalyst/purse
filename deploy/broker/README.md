@@ -16,7 +16,7 @@ Only have the image? Point it at your own Postgres and skip straight to routing 
 
 ```bash
 docker run -e DATABASE_URL=... -e PURSE_ADMIN_TOKEN=... -e PURSE_MAX_PER_ACTION='$50' -e PURSE_ALLOW=api.stripe.com \
-  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.0
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.1
 ```
 
 1. Start it.
@@ -248,7 +248,7 @@ curl -s http://127.0.0.1:8083/flags
 
 `GET /events` names what went wrong, a skipped row, a failed or rejected push, a revoked key. A revoked or unknown key stops the monitor; fix the key and restart it.
 
-Limits. The monitor reads at most five hundred receipts per tick. `GET /` shows `headSeq` and `behind`, and readiness goes red once `behind` passes `MONITOR_MAX_BEHIND`, so a stream that grows faster than the monitor reads is visible, not silent. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. A monitor attached to an existing chain starts at the head and judges only what arrives after it, unless `MONITOR_START=beginning` asks for the history, in which case flags beyond the hosted sink's queue of a thousand in one tick are dropped from delivery with a `dropped` event and stay in `monitor_flags`. The monitor is not part of proof. The witness is.
+Limits. The monitor reads at most five hundred receipts per tick. `GET /` shows `headSeq` and `behind`, and readiness goes red once `behind` passes `MONITOR_MAX_BEHIND`, so a stream that grows faster than the monitor reads is visible, not silent. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. A monitor attached to an existing chain starts at the head and judges only what arrives after it, unless `MONITOR_START=beginning` asks for the history, in which case flags beyond the hosted sink's queue of a thousand in one tick are dropped from delivery with a `dropped` event and stay in `monitor_flags`. On an empty chain it starts at seq 0 and says so in `GET /events`. On a quiet stream `GET /` keeps showing the last receipts as the window until a newer receipt arrives and ages them out. The monitor is not part of proof. The witness is.
 
 ## Where each port may be reached from
 
@@ -304,8 +304,8 @@ It prints the number of receipts restored, the head hash, and the verify result,
 flyctl apps create purse-broker
 flyctl postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
 flyctl postgres attach purse-broker-db -a purse-broker
-flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.0 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.0 --ha=false
+flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.1 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.1 --ha=false
 ```
 
 `--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `flyctl deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
