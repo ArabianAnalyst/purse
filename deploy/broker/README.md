@@ -121,6 +121,17 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `WITNESS_MAX_LAG` | `2` | Intervals the witness may fall behind before readiness goes red. |
 | `WITNESS_PORT` | `8082` | The witness port, read-only, no token. |
 | `WITNESS_BIND` | `0.0.0.0` | Bind address for the witness port. |
+| `MONITOR_STREAM` | `PURSE_STREAM` or `purse` | The stream the monitor reads. One monitor per stream. |
+| `MONITOR_INTERVAL_MS` | `60000` | How often the monitor reads new receipts. |
+| `MONITOR_WINDOW` | `500/24h` | The sliding window, `<count>/<duration>` with the duration in `m`, `h` or `d`. |
+| `MONITOR_VELOCITY` | `5/10m` | The `payee-velocity` threshold, `<count>/<duration>`. |
+| `MONITOR_DISABLE` | | Comma-separated built-in ids to switch off. |
+| `MONITOR_EXPECTATIONS` | | Path to an ES module whose default export is an array of expectations. |
+| `DEADLATCH_URL` | `https://www.deadlatch.dev` | Where flags and heartbeats go. |
+| `DEADLATCH_PROJECT_KEY` | | The project key from the dashboard. Unset means flags go to the file instead. |
+| `MONITOR_FLAGS_FILE` | `/data/flags.jsonl` | The local sink when no key is set. |
+| `MONITOR_PORT` | `8083` | The monitor port, read-only, no token. |
+| `MONITOR_BIND` | `0.0.0.0` | Bind address for the monitor port. |
 | `PURSE_CURRENCY` | `USD` | Policy currency. Must be USD for x402 on a real network. |
 | `PURSE_MAX_PER_ACTION` | | Cap per spend, for example `$50`. |
 | `PURSE_MAX_PER_DAY` | | Rolling daily cap. Open grants reserve budget. |
@@ -190,6 +201,41 @@ Readiness on the witness port, `GET /readyz`, is 200 only when the last tick ver
 
 Limits. One witness per stream, a second one on the same stream records a conflict and stops anchoring. The public log's instance URL rotates by year; when it does, set `REKOR_URL` and `REKOR_LOG_KEY` to the new one and old anchors still verify against the old key. Time is not proven by an anchor, only order.
 
+## The monitor
+
+The broker enforces what an agent may spend. The monitor watches what it did. It is a third process on the same image, `node dist/monitor.js`, that reads new receipts every minute, judges each one once against a sliding window with deterministic expectations, and pushes only the flags to a Deadlatch project, or to a local file when no project key is set. It never writes to the receipts table and never blocks an action.
+
+Four expectations are built in, each defined only over fields the chain carries.
+
+| id | fires when |
+|---|---|
+| `executed-without-grant` | an `executed` receipt names a grant the window never saw minted, or no grant at all |
+| `executed-once` | two `executed` receipts in the window share a grant |
+| `paid-matches-decision` | the rail settled a different amount or currency than the minted decision allowed |
+| `payee-velocity` | the same payee was executed `MONITOR_VELOCITY` times or more inside its duration, default `5/10m` |
+
+The window must be at least as long as a grant lives for the first one to mean anything. `MONITOR_WINDOW` defaults to `500/24h`, five hundred receipts or one day, whichever ends first. Switch a built-in off by naming it in `MONITOR_DISABLE`. Add your own by pointing `MONITOR_EXPECTATIONS` at an ES module whose default export is an array of expectations, the same shape `@olurabian/tripwire` scans with. An id that collides with a built-in is a boot error.
+
+Three lines connect it to a Deadlatch project. The project's settings page prints them with the key filled in.
+
+```sh
+DEADLATCH_URL=https://www.deadlatch.dev
+DEADLATCH_PROJECT_KEY=dl_live_...
+MONITOR_STREAM=purse
+```
+
+Without a key the monitor still runs. Flags go to `MONITOR_FLAGS_FILE`, one JSON line each. With or without a key, every flag is written to the `monitor_flags` table beside the receipts before any push, and `GET /flags` on the monitor port serves them. The cursor lives in `monitor_cursor` and moves only after every held flag was confirmed, so a hosted outage delays flags and never loses them.
+
+```sh
+curl -s http://127.0.0.1:8083/            # what it watches, the key prefix, the cursor, the last tick and push
+curl -s http://127.0.0.1:8083/flags       # every flag this monitor stored, oldest first
+curl -s http://127.0.0.1:8083/readyz      # 200 when the last tick succeeded within three intervals and the last push succeeded or had nothing to push
+```
+
+`GET /events` names what went wrong, a skipped row, a failed or rejected push, a revoked key. A revoked or unknown key stops the monitor; fix the key and restart it.
+
+Limits. The monitor reads at most five hundred receipts per tick, so a stream that grows faster than that per interval falls behind and readiness says so. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. The monitor is not part of proof. The witness is.
+
 ## Where each port may be reached from
 
 The enforcement property only holds under the deployment contract in the Purse threat model. In network terms it comes to this.
@@ -199,6 +245,7 @@ The enforcement property only holds under the deployment contract in the Purse t
 - The wallet key reaches the broker as a mounted secret. Nothing in the agent's runtime holds a rail credential.
 - The agent has no other payment tool and no direct access to the rail. If it can pay some other way, the broker is not a boundary, it is a suggestion.
 - The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret. Still, put it behind your own network boundary unless you mean to publish it.
+- The monitor port is read-only like the witness port. It shows the first eight characters of the project key and nothing else secret. Same rule, your own boundary unless you mean to publish it.
 
 ## Known limits
 
@@ -243,13 +290,15 @@ It prints the number of receipts restored, the head hash, and the verify result,
 flyctl apps create purse-broker
 flyctl postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
 flyctl postgres attach purse-broker-db -a purse-broker
-flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.2.0 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.2.0 --ha=false
+flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.0 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.0 --ha=false
 ```
 
 `--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `flyctl deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
 
 Why `WITNESS_KEY_PEM` is a secret rather than a mounted file on Fly. Fly volumes mount root-owned, and the image runs as a non-root user, so the witness process cannot write a key file onto one. Fly secrets are app-wide, so the broker machines receive `WITNESS_KEY_PEM` too, though the broker never reads it. An operator who wants the key on the witness machines alone can run the witness as its own Fly app, with the same image and the same command, and set the secret there instead.
+
+The same deploy starts the monitor on its own machine. Until `DEADLATCH_PROJECT_KEY` is set it writes flags to its own machine and to the `monitor_flags` table, and `GET /flags` on port 8083 serves them. `flyctl secrets set DEADLATCH_PROJECT_KEY=... -a purse-broker` connects it to a project and Fly restarts the machines.
 
 The admin port is not exposed. Reach it through a WireGuard proxy, `flyctl proxy 8081:8081 -a purse-broker`, which on Windows needs an elevated terminal. Without one, run the admin call inside the machine instead.
 
@@ -261,6 +310,12 @@ The witness port is not exposed either. Reach it the same way, on the witness ma
 
 ```bash
 flyctl machine exec <witness machine id> -a purse-broker "wget -qO- http://127.0.0.1:8082/verify"
+```
+
+And the monitor port, on the monitor machine.
+
+```bash
+flyctl machine exec <monitor machine id> -a purse-broker "wget -qO- http://127.0.0.1:8083/"
 ```
 
 ## Image
