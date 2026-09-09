@@ -126,6 +126,7 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `MONITOR_WINDOW` | `500/24h` | The sliding window, `<count>/<duration>` with the duration in `m`, `h` or `d`. |
 | `MONITOR_VELOCITY` | `5/10m` | The `payee-velocity` threshold, `<count>/<duration>`. |
 | `MONITOR_MAX_BEHIND` | `2500` | Readiness goes red when the cursor is more than this many receipts behind the chain head. `0` switches the check off. |
+| `MONITOR_START` | `head` | Where a monitor with no cursor begins. `head` skips the existing chain, `beginning` judges it from the first receipt. |
 | `MONITOR_DISABLE` | | Comma-separated built-in ids to switch off. |
 | `MONITOR_EXPECTATIONS` | | Path to an ES module whose default export is an array of expectations. |
 | `DEADLATCH_URL` | `https://www.deadlatch.dev` | Where flags and heartbeats go. |
@@ -247,7 +248,7 @@ curl -s http://127.0.0.1:8083/flags
 
 `GET /events` names what went wrong, a skipped row, a failed or rejected push, a revoked key. A revoked or unknown key stops the monitor; fix the key and restart it.
 
-Limits. The monitor reads at most five hundred receipts per tick. `GET /` shows `headSeq` and `behind`, and readiness goes red once `behind` passes `MONITOR_MAX_BEHIND`, so a stream that grows faster than the monitor reads is visible, not silent. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. Flags beyond the hosted sink's queue of a thousand in one tick are dropped from delivery with a `dropped` event and stay in `monitor_flags`, which a monitor attached to a long existing chain should expect on its first ticks. The monitor is not part of proof. The witness is.
+Limits. The monitor reads at most five hundred receipts per tick. `GET /` shows `headSeq` and `behind`, and readiness goes red once `behind` passes `MONITOR_MAX_BEHIND`, so a stream that grows faster than the monitor reads is visible, not silent. Judgment is per record against the window, a receipt the window has already seen is never judged again, and a rule that needs history older than the window cannot fire. A monitor attached to an existing chain starts at the head and judges only what arrives after it, unless `MONITOR_START=beginning` asks for the history, in which case flags beyond the hosted sink's queue of a thousand in one tick are dropped from delivery with a `dropped` event and stay in `monitor_flags`. The monitor is not part of proof. The witness is.
 
 ## Where each port may be reached from
 

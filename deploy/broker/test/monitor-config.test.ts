@@ -77,3 +77,9 @@ test("integers are validated with their floor", () => {
 test("otel is on only when the OTLP endpoint is set", () => {
   assert.equal(loadMonitorConfig({ ...base(), OTEL_EXPORTER_OTLP_ENDPOINT: "http://collector:4318" }).otel, true);
 });
+
+test("MONITOR_START defaults to head, accepts beginning, and rejects anything else", () => {
+  assert.equal(loadMonitorConfig(base()).start, "head");
+  assert.equal(loadMonitorConfig({ ...base(), MONITOR_START: "beginning" }).start, "beginning");
+  assert.throws(() => loadMonitorConfig({ ...base(), MONITOR_START: "middle" }), /MONITOR_START must be head or beginning, got "middle"/);
+});

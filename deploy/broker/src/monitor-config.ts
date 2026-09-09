@@ -15,6 +15,8 @@ export interface MonitorConfig {
   velocity: Span;
   /** Readiness goes red when the cursor is more than this many receipts behind the chain head. 0 switches the check off. */
   maxBehind: number;
+  /** Where a monitor with no cursor row begins. `head` skips the existing chain, `beginning` judges it from the first receipt. */
+  start: "head" | "beginning";
   /** Built-in expectation ids switched off. */
   disable: string[];
   /** Path to an ES module whose default export is an Expectation[]. */
@@ -56,12 +58,15 @@ export function loadMonitorConfig(env: Env = process.env): MonitorConfig {
   if (!/^https?:\/\//.test(url)) throw new MonitorConfigError(`DEADLATCH_URL must start with http:// or https://, got "${url}"`);
   const projectKey = env.DEADLATCH_PROJECT_KEY || undefined;
   const disable = (env.MONITOR_DISABLE ?? "").split(",").map((s) => s.trim()).filter((s) => s.length > 0);
+  const start = env.MONITOR_START ?? "head";
+  if (start !== "head" && start !== "beginning") throw new MonitorConfigError(`MONITOR_START must be head or beginning, got "${start}"`);
   return {
     databaseUrl, stream, table: "receipts",
     intervalMs: int("MONITOR_INTERVAL_MS", env.MONITOR_INTERVAL_MS, 60000, 1000),
     window: parseSpan("MONITOR_WINDOW", env.MONITOR_WINDOW ?? "500/24h"),
     velocity: parseSpan("MONITOR_VELOCITY", env.MONITOR_VELOCITY ?? "5/10m"),
     maxBehind: int("MONITOR_MAX_BEHIND", env.MONITOR_MAX_BEHIND, 2500, 0),
+    start,
     disable,
     expectationsModule: env.MONITOR_EXPECTATIONS || undefined,
     deadlatch: { url, projectKey },

@@ -121,18 +121,28 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
     },
   };
 
+  async function saveCursor(cursor: Cursor): Promise<void> {
+    await sql.query(
+      "INSERT INTO monitor_cursor (stream, seq, updated_at) VALUES ($1, $2, $3) ON CONFLICT (stream) DO UPDATE SET seq = EXCLUDED.seq, updated_at = EXCLUDED.updated_at",
+      [cfg.stream, cursor.seq, now()],
+    );
+  }
   const cursorStore: CursorStore = {
     async load() {
       const { rows } = await sql.query("SELECT seq FROM monitor_cursor WHERE stream = $1", [cfg.stream]);
       const r = rows[0];
-      return r ? { seq: Number(r.seq) } : null;
+      if (r) return { seq: Number(r.seq) };
+      if (cfg.start !== "head") return null;
+      // No cursor yet and the operator did not ask for history. Start at the head, durably, and say so.
+      const head = await sql.query(`SELECT max(seq) AS head FROM ${cfg.table} WHERE stream = $1`, [cfg.stream]);
+      const h = head.rows[0]?.head;
+      if (h == null) return null;
+      const cursor = { seq: Number(h) };
+      await saveCursor(cursor);
+      remember("started", `no cursor for stream ${cfg.stream}, starting at head seq ${cursor.seq} (MONITOR_START=head)`);
+      return cursor;
     },
-    async save(cursor) {
-      await sql.query(
-        "INSERT INTO monitor_cursor (stream, seq, updated_at) VALUES ($1, $2, $3) ON CONFLICT (stream) DO UPDATE SET seq = EXCLUDED.seq, updated_at = EXCLUDED.updated_at",
-        [cfg.stream, cursor.seq, now()],
-      );
-    },
+    save: saveCursor,
   };
 
   const key = cfg.deadlatch.projectKey;

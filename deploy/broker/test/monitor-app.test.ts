@@ -248,3 +248,40 @@ test("readiness goes red when the cursor falls further behind the head than MONI
   await off.close();
   await app.close();
 });
+
+test("with MONITOR_START head, a monitor with no cursor starts at the head, judges nothing behind it, persists the cursor, and records why", async () => {
+  const { db, app, hosted } = await setup({}, { start: "head" });
+  await seedDecisions(db, "t", [executed("g9"), executed("g10")]);
+  await app.tick();
+  assert.deepEqual(app.state().cursor, { seq: 2 });
+  assert.equal(await cursorRow(db), "2");
+  assert.deepEqual(await app.flags(), []);
+  assert.equal(hosted.flagsCalls().length, 0);
+  assert.deepEqual((await app.events()).map((e) => [e.kind, e.detail]), [["started", "no cursor for stream t, starting at head seq 2 (MONITOR_START=head)"]]);
+  assert.equal(app.state().behind, 0);
+  await seedDecisions(db, "t", [executed("g11")], 10);
+  await app.tick();
+  assert.deepEqual((await app.flags()).map((f) => f.flag.offender.ref.seq), [3]);
+  await app.close();
+});
+
+test("with MONITOR_START head on an empty stream, the cursor stays null and the first receipt is judged", async () => {
+  const { db, app } = await setup({}, { start: "head" });
+  await app.tick();
+  assert.equal(app.state().cursor, null);
+  assert.deepEqual(await app.events(), []);
+  await seedDecisions(db, "t", [executed("g9")]);
+  await app.tick();
+  assert.deepEqual((await app.flags()).map((f) => f.flag.offender.ref.seq), [1]);
+  await app.close();
+});
+
+test("with MONITOR_START head, an existing cursor row wins over the head", async () => {
+  const { db, app } = await setup({}, { start: "head" });
+  await seedDecisions(db, "t", [executed("g9"), executed("g10"), executed("g11")]);
+  await db.query("INSERT INTO monitor_cursor (stream, seq, updated_at) VALUES ('t', 1, now())");
+  await app.tick();
+  assert.deepEqual((await app.flags()).map((f) => f.flag.offender.ref.seq), [2, 3]);
+  assert.deepEqual(await app.events(), []);
+  await app.close();
+});
