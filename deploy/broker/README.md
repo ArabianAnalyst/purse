@@ -16,7 +16,7 @@ Only have the image? Point it at your own Postgres and skip straight to routing 
 
 ```bash
 docker run -e DATABASE_URL=... -e PURSE_ADMIN_TOKEN=... -e PURSE_MAX_PER_ACTION='$50' -e PURSE_ALLOW=api.stripe.com \
-  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.1
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.2
 ```
 
 1. Start it.
@@ -190,14 +190,23 @@ curl -s http://127.0.0.1:8082/verify      # verifyAnchored over the live chain, 
 curl -s http://127.0.0.1:8081/verify -H "authorization: Bearer $PURSE_ADMIN_TOKEN"   # the broker's view, now with anchoredUpTo
 ```
 
+The witness also serves the chain it anchors, so a sceptic needs nothing from the admin port.
+
+```sh
+curl -s "http://127.0.0.1:8082/chain?since=0&limit=100"          # { stream, total, head, since, count, records }, oldest first, at most five hundred
+curl -s "http://127.0.0.1:8082/chain?format=jsonl&limit=500"     # one receipt per line, the file the verifier reads
+```
+
+`since` is the 0-based position in the stream, the same number the anchors carry as `seq`. `total` is the stream length, so a tail is `since = total - n`. `head` is the last record's position and hash, or null on an empty stream.
+
 The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. `npx receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read.
 
 ```sh
-curl -s http://127.0.0.1:8081/audit -H "authorization: Bearer $PURSE_ADMIN_TOKEN" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.stringify(JSON.parse(d).receipts)))' > chain.json
-npx receipt-verify chain.json --anchors http://127.0.0.1:8082 --log-key "$REKOR_LOG_KEY" --witness-key <public key from GET /> --stream purse
+curl -s "http://127.0.0.1:8082/chain?format=jsonl&limit=500" > chain.jsonl
+npx receipt-verify chain.jsonl --anchors http://127.0.0.1:8082 --log-key "$REKOR_LOG_KEY" --witness-key <public key from GET /> --stream purse
 ```
 
-Exit 0 means the chain verifies and at least one anchor holds. Rewrite a receipt in `chain.json` and run it again, and the output names the position.
+Exit 0 means the chain verifies and at least one anchor holds. Rewrite a receipt in `chain.jsonl` and run it again, and the output names the position.
 
 Readiness on the witness port, `GET /readyz`, is 200 only when the last tick verified the chain within `WITNESS_MAX_LAG` intervals and the head is anchored or the last anchor is younger than that window. A broken chain, a log that will not answer, or a stalled tick all turn it red, and `GET /events` says which. `GET /events` pages by `since` in chunks of one thousand, so a long history takes more than one call to walk. The witness reads `receipts` and writes only `anchors` and `witness_events`; nothing on its port can change anything.
 
@@ -258,7 +267,7 @@ The enforcement property only holds under the deployment contract in the Purse t
 - The admin port is reachable from operators only. Never from the agent's network. A leaked token here is a full compromise, so rotate it like a password.
 - The wallet key reaches the broker as a mounted secret. Nothing in the agent's runtime holds a rail credential.
 - The agent has no other payment tool and no direct access to the rail. If it can pay some other way, the broker is not a boundary, it is a suggestion.
-- The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret. Still, put it behind your own network boundary unless you mean to publish it.
+- The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret, and since 0.3.2 it serves the chain as well as the anchors. Still, put it behind your own network boundary unless you mean to publish it.
 - The monitor port is read-only like the witness port. It shows the first eight characters of the project key after `dl_live_` and nothing else secret. Same rule, your own boundary unless you mean to publish it.
 
 ## Known limits
@@ -304,8 +313,8 @@ It prints the number of receipts restored, the head hash, and the verify result,
 flyctl apps create purse-broker
 flyctl postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
 flyctl postgres attach purse-broker-db -a purse-broker
-flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.1 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.1 --ha=false
+flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.2 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.2 --ha=false
 ```
 
 `--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `flyctl deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
@@ -331,6 +340,22 @@ And the monitor port, on the monitor machine.
 ```bash
 flyctl machine exec <monitor machine id> -a purse-broker "wget -qO- http://127.0.0.1:8083/"
 ```
+
+## A playground broker
+
+A second app from the same image, for strangers. Its own stream, its own witness key, its own dashboard project, a policy tuned so a visitor sees allowed, held and denied in three presses, and the witness port public so anyone can fetch the chain and run the verifier. `fly.playground.toml` is that app. The mock executor is the only executor it runs, nothing settles, and the daily cap is the hard stop against abuse.
+
+```bash
+flyctl apps create purse-playground
+# a database of its own in the existing cluster, created from inside the cluster's machine
+flyctl machine exec <db machine id> -a purse-broker-db "sh -c 'PGPASSWORD=\$OPERATOR_PASSWORD psql -h localhost -U postgres -d postgres -c \"CREATE DATABASE purse_playground\"'"
+flyctl secrets set -a purse-playground DATABASE_URL="<the cluster's connection string with /purse_playground>" PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.2 node dist/witness.js keygen)" REKOR_LOG_KEY=...
+flyctl deploy --config fly.playground.toml -a purse-playground --image ghcr.io/arabiananalyst/purse-broker:0.3.2 --ha=false
+curl -s https://purse-playground.fly.dev/                 # the agent port
+curl -s https://purse-playground.fly.dev:8082/            # the witness port, public here
+```
+
+`DEADLATCH_PROJECT_KEY` comes from a project on the dashboard, set it the same way and the monitor starts pushing flags. Never reuse the reference deployment's admin token or witness key here.
 
 ## Image
 
