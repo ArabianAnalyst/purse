@@ -199,6 +199,8 @@ curl -s "http://127.0.0.1:8082/chain?format=jsonl&limit=500"     # one receipt p
 
 `since` is the 0-based position in the stream, the same number the anchors carry as `seq`. `total` is the stream length, so a tail is `since = total - n`. `head` is the last record's position and hash, or null on an empty stream.
 
+Get the newest anchors only with `GET /anchors?tail=1` for a page that only needs the head.
+
 The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. The loop pages the chain in slices of five hundred, since `GET /chain` never answers more than that in one call. `npx receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read.
 
 ```sh
@@ -349,7 +351,7 @@ flyctl machine exec <monitor machine id> -a purse-broker "wget -qO- http://127.0
 
 ## A playground broker
 
-A second app from the same image, for strangers. Its own stream, its own witness key, its own dashboard project, a policy tuned so a visitor sees allowed, held and denied in three presses, and the witness port public so anyone can fetch the chain and run the verifier. `fly.playground.toml` is that app. The mock executor is the only executor it runs, nothing settles, and the daily cap is the hard stop against abuse.
+A second app from the same image, for strangers. Its own stream, its own witness key, its own dashboard project, a policy tuned so a visitor sees allowed, held and denied in three presses, and the witness port public so anyone can fetch the chain and run the verifier. `fly.playground.toml` is that app. The mock executor is the only executor it runs, nothing settles, and the daily cap of twenty-five thousand dollars is the hard stop against abuse.
 
 ```bash
 flyctl apps create purse-playground

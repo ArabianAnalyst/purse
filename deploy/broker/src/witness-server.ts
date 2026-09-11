@@ -18,7 +18,7 @@ export function createWitnessServer(w: Witness, cfg: WitnessConfig): Server {
       intervalMs: s.intervalMs,
       routes: {
         "GET /chain?since=<seq>&limit=<n>&format=<json|jsonl>": "the receipts themselves, oldest first from a 0-based position, at most five hundred per call with next for the rest, jsonl is the file the verifier reads",
-        "GET /anchors?since=<seq>": "the anchors for this stream, oldest first",
+        "GET /anchors?since=<seq> or ?tail=<n>": "the anchors for this stream, oldest first, or the newest n",
         "GET /verify": "verifyAnchored over the live chain and anchors, with the pinned log key and this witness's key",
         "GET /events?since=<n>": "anchored, anchor-failed, anchor-conflict, chain-broken",
         "GET /healthz": "liveness",
@@ -41,6 +41,14 @@ export function createWitnessServer(w: Witness, cfg: WitnessConfig): Server {
         case "/healthz": return send(res, 200, { ok: true });
         case "/readyz": { const r = w.ready(); return send(res, r.ok ? 200 : 503, r); }
         case "/anchors": {
+          const tail = url.searchParams.get("tail");
+          if (tail != null) {
+            const n = Number(tail);
+            if (!Number.isInteger(n) || n <= 0) return send(res, 400, { error: "tail must be a positive integer" });
+            const allAnchors = await w.anchors(-1);
+            const sliced = allAnchors.slice(Math.max(0, allAnchors.length - Math.min(n, 500)));
+            return send(res, 200, { stream: cfg.stream, anchors: sliced });
+          }
           const since = nonNegative(url.searchParams.get("since"));
           if (since === null) return send(res, 400, { error: "since must be a non-negative integer seq" });
           return send(res, 200, { stream: cfg.stream, anchors: await w.anchors(since) });

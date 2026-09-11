@@ -40,6 +40,16 @@ test("the witness port: index, anchors, verify, events, health, readiness, and n
     assert.equal(((await get(`${srv.url}/anchors?since=2`)).json.anchors as unknown[]).length, 0);
     assert.equal((await get(`${srv.url}/anchors?since=x`)).status, 400);
     assert.equal((await get(`${srv.url}/anchors?since=99999999999999999999`)).status, 400);
+    const tail1 = await get(`${srv.url}/anchors?tail=1`);
+    assert.equal((tail1.json.anchors as unknown[]).length, 1);
+    assert.deepEqual(tail1.json.anchors, an.json.anchors, "tail=1 returns the same anchor");
+    const tail5 = await get(`${srv.url}/anchors?tail=5`);
+    assert.equal((tail5.json.anchors as unknown[]).length, 1, "tail=5 also returns one anchor since there is only one");
+    assert.equal((await get(`${srv.url}/anchors?tail=0`)).status, 400);
+    assert.equal((await get(`${srv.url}/anchors?tail=-1`)).status, 400);
+    assert.equal((await get(`${srv.url}/anchors?tail=x`)).status, 400);
+    const tailWins = await get(`${srv.url}/anchors?since=99&tail=1`);
+    assert.equal((tailWins.json.anchors as unknown[]).length, 1, "tail wins over since");
     const v = await get(`${srv.url}/verify`);
     assert.equal(v.status, 200);
     assert.equal(v.json.ok, true);
