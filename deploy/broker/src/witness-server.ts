@@ -24,7 +24,7 @@ export function createWitnessServer(w: Witness, cfg: WitnessConfig): Server {
         "GET /healthz": "liveness",
         "GET /readyz": "200 only when the last tick verified within the lag window and the head is anchored",
       },
-      verifyWith: `s=0; : > chain.jsonl; while :; do n=$(curl -s "<this url>/chain?format=jsonl&since=$s&limit=500" | tee -a chain.jsonl | wc -l); [ "$n" -lt 500 ] && break; s=$((s+500)); done; npx receipt-verify chain.jsonl --anchors <this url> --log-key ${cfg.rekor.logKey.origin}=<base64 DER from Sigstore's trust root> --witness-key ${s.publicKey} --stream ${s.stream}`,
+      verifyWith: `s=0; : > chain.jsonl; while :; do n=$(curl -s "<this url>/chain?format=jsonl&since=$s&limit=500" | tee -a chain.jsonl | wc -l); [ "$n" -lt 500 ] && break; s=$((s+500)); done; npx -p @olurabian/receipt receipt-verify chain.jsonl --anchors <this url> --log-key ${cfg.rekor.logKey.origin}=<base64 DER from Sigstore's trust root> --witness-key ${s.publicKey} --stream ${s.stream}`,
     };
   };
   const nonNegative = (v: string | null): number | null => {

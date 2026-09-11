@@ -201,7 +201,7 @@ curl -s "http://127.0.0.1:8082/chain?format=jsonl&limit=500"     # one receipt p
 
 Get the newest anchors only with `GET /anchors?tail=1` for a page that only needs the head.
 
-The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. The loop pages the chain in slices of five hundred, since `GET /chain` never answers more than that in one call. `npx receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read.
+The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. The loop pages the chain in slices of five hundred, since `GET /chain` never answers more than that in one call. `receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read, and `-p` is what tells npx which package the command lives in.
 
 ```sh
 s=0
@@ -211,7 +211,7 @@ while :; do
   [ "$n" -lt 500 ] && break
   s=$((s+500))
 done
-npx receipt-verify chain.jsonl --anchors http://127.0.0.1:8082 --log-key "$REKOR_LOG_KEY" --witness-key <public key from GET /> --stream purse
+npx -p @olurabian/receipt receipt-verify chain.jsonl --anchors http://127.0.0.1:8082 --log-key "$REKOR_LOG_KEY" --witness-key <public key from GET /> --stream purse
 ```
 
 Exit 0 means the chain verifies and at least one anchor holds. Rewrite a receipt in `chain.jsonl` and run it again, and the output names the position.
