@@ -60,6 +60,112 @@ test("the witness port: index, anchors, verify, events, health, readiness, and n
   }
 });
 
+test("GET /chain serves the receipts oldest first, with total and head, validated, and as jsonl", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 7);
+  const rekor = new FakeRekor();
+  const c = clock();
+  const signer = P256Signer.generate();
+  const cfg = witnessCfg(rekor);
+  const w = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer });
+  const srv = await listen(createWitnessServer(w, cfg), 0, "127.0.0.1");
+  try {
+    const all = await get(`${srv.url}/chain`);
+    assert.equal(all.status, 200);
+    assert.equal(all.json.stream, "t");
+    assert.equal(all.json.total, 7);
+    assert.equal(all.json.since, 0);
+    assert.equal(all.json.count, 7);
+    const recs = all.json.records as { id: string; prevHash: string; hash: string }[];
+    assert.deepEqual(recs.map((r) => r.id), ["id-0", "id-1", "id-2", "id-3", "id-4", "id-5", "id-6"]);
+    assert.equal(recs[1]!.prevHash, recs[0]!.hash, "the slice is the chain, linked");
+    assert.deepEqual(all.json.head, { seq: 6, hash: recs[6]!.hash });
+    assert.deepEqual(Object.keys(recs[0]!), ["id", "ts", "kind", "payload", "prevHash", "hash"], "stored key order survives");
+
+    const tail = await get(`${srv.url}/chain?since=5&limit=1`);
+    assert.deepEqual((tail.json.records as { id: string }[]).map((r) => r.id), ["id-5"]);
+    assert.equal(tail.json.since, 5);
+    assert.equal(tail.json.count, 1);
+    assert.equal(tail.json.total, 7);
+
+    const past = await get(`${srv.url}/chain?since=99`);
+    assert.equal(past.status, 200);
+    assert.equal(past.json.count, 0);
+    assert.equal(past.json.since, 7, "since is clamped to the stream length");
+
+    assert.equal((await get(`${srv.url}/chain?limit=9999`)).json.count, 7, "a large limit is clamped, not rejected");
+
+    for (const bad of ["since=x", "since=-2", "since=99999999999999999999", "limit=0", "limit=-1", "limit=x", "limit=1.5", "format=xml"]) {
+      assert.equal((await get(`${srv.url}/chain?${bad}`)).status, 400, bad);
+    }
+
+    const jl = await fetch(`${srv.url}/chain?format=jsonl&since=4`);
+    assert.equal(jl.status, 200);
+    assert.equal(jl.headers.get("content-type"), "application/x-ndjson");
+    const body = await jl.text();
+    assert.ok(body.endsWith("\n"), "trailing newline");
+    const lines = body.trim().split("\n");
+    assert.equal(lines.length, 3);
+    assert.equal((JSON.parse(lines[0]!) as { id: string }).id, "id-4");
+    assert.equal(Object.keys(JSON.parse(lines[0]!) as object).join(","), "id,ts,kind,payload,prevHash,hash");
+
+    const idx = await get(`${srv.url}/`);
+    assert.ok(Object.keys(idx.json.routes as object).some((k) => k.startsWith("GET /chain")), "the index lists the route");
+    assert.match(String(idx.json.verifyWith), /chain\?format=jsonl&limit=500/);
+    assert.equal((await fetch(`${srv.url}/chain`, { method: "POST" })).status, 404);
+  } finally {
+    await srv.close();
+    await w.close();
+  }
+});
+
+test("GET /chain caps a slice at five hundred records", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 502);
+  const rekor = new FakeRekor();
+  const c = clock();
+  const cfg = witnessCfg(rekor);
+  const w = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer: P256Signer.generate() });
+  const srv = await listen(createWitnessServer(w, cfg), 0, "127.0.0.1");
+  try {
+    const a = await get(`${srv.url}/chain?limit=9999`);
+    assert.equal(a.json.count, 500);
+    assert.equal(a.json.total, 502);
+    assert.equal((a.json.records as { id: string }[])[499]!.id, "id-499");
+    const b = await get(`${srv.url}/chain?since=1&limit=600`);
+    assert.equal(b.json.count, 500);
+    assert.equal((b.json.records as { id: string }[])[0]!.id, "id-1");
+    const last = await get(`${srv.url}/chain?since=500`);
+    assert.equal(last.json.count, 2);
+    assert.deepEqual(last.json.head, { seq: 501, hash: (last.json.records as { hash: string }[])[1]!.hash });
+  } finally {
+    await srv.close();
+    await w.close();
+  }
+});
+
+test("GET /chain on an empty stream", async () => {
+  const db = new PGlite();
+  await seedReceipts(db, "t", 0);
+  const rekor = new FakeRekor();
+  const c = clock();
+  const cfg = witnessCfg(rekor);
+  const w = await createWitness(cfg, { sqlClient: db as unknown as SqlClient, fetch: rekor.fetch(), now: c.now, signer: P256Signer.generate() });
+  const srv = await listen(createWitnessServer(w, cfg), 0, "127.0.0.1");
+  try {
+    const r = await get(`${srv.url}/chain`);
+    assert.equal(r.status, 200);
+    assert.deepEqual(r.json, { stream: "t", total: 0, head: null, since: 0, count: 0, records: [] });
+    const jl = await fetch(`${srv.url}/chain?format=jsonl`);
+    assert.equal(jl.status, 200);
+    assert.equal(jl.headers.get("content-type"), "application/x-ndjson");
+    assert.equal(await jl.text(), "");
+  } finally {
+    await srv.close();
+    await w.close();
+  }
+});
+
 test("witness.js keygen prints a P-256 PEM on stdout and the public key on stderr", () => {
   const out = execFileSync(process.execPath, [join(process.cwd(), "dist", "witness.js"), "keygen"], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] });
   assert.match(out, /^-----BEGIN PRIVATE KEY-----/);

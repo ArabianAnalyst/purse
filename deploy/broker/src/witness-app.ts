@@ -28,6 +28,7 @@ export interface WitnessState {
   conflictSeq: number | null;
 }
 export interface WitnessOverrides { sqlClient?: SqlClient; fetch?: typeof fetch; now?: () => string; signer?: P256Signer }
+export interface ChainSlice { total: number; head: { seq: number; hash: string } | null; since: number; records: Receipt[] }
 export interface Witness {
   readonly publicKey: string;
   readonly trust: AnchorTrust;
@@ -36,6 +37,8 @@ export interface Witness {
   anchors(sinceSeq?: number): Promise<Anchor[]>;
   events(sinceN?: number): Promise<WitnessEvent[]>;
   verify(): Promise<AnchoredVerifyResult>;
+  /** The receipts themselves, oldest first from `since` (0-based position), at most `limit`, clamped to 500. The same read the verify tick uses. */
+  chain(since?: number, limit?: number): Promise<ChainSlice>;
   ready(): { ok: boolean; reason?: string };
   close(): Promise<void>;
 }
@@ -68,6 +71,9 @@ const EVENTS_SCHEMA = `CREATE TABLE IF NOT EXISTS witness_events (
   kind TEXT NOT NULL,
   detail TEXT NOT NULL
 )`;
+
+/** The most records one GET /chain answers. */
+export const CHAIN_LIMIT_MAX = 500;
 
 export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverrides = {}): Promise<Witness> {
   const pool = overrides.sqlClient ? null : new pg.Pool({ connectionString: cfg.databaseUrl });
@@ -207,6 +213,14 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
     async verify() {
       const list = (await rowsFrom(-1)).flatMap((r) => (r.anchor ? [r.anchor] : []));
       return verifyAnchored(await records(), list, trust, { stream: cfg.stream });
+    },
+    async chain(since = 0, limit = 100) {
+      const all = await records();
+      const total = all.length;
+      const head = total ? { seq: total - 1, hash: all[total - 1]!.hash } : null;
+      const from = Math.min(Math.max(0, Math.trunc(since)), total);
+      const take = Math.min(Math.max(1, Math.trunc(limit)), CHAIN_LIMIT_MAX);
+      return { total, head, since: from, records: all.slice(from, from + take) };
     },
     ready,
     async close() { if (pool) await pool.end(); },
