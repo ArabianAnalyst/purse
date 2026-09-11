@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { PGlite } from "@electric-sql/pglite";
-import type { SqlClient } from "@olurabian/receipt";
+import { PostgresStore, makeReceipt, type SqlClient } from "@olurabian/receipt";
 import { P256Signer } from "@olurabian/receipt/anchor";
 import { createWitness } from "../src/witness-app.js";
 import { createWitnessServer } from "../src/witness-server.js";
@@ -63,6 +63,9 @@ test("the witness port: index, anchors, verify, events, health, readiness, and n
 test("GET /chain serves the receipts oldest first, with total and head, validated, and as jsonl", async () => {
   const db = new PGlite();
   await seedReceipts(db, "t", 7);
+  const store = await PostgresStore.open<{ reason: string }>(db as unknown as SqlClient, { stream: "t" });
+  makeReceipt(store, { kind: "decision", payload: { reason: "payée déjà réglée ✓" } }, { now: () => "2026-09-08T00:00:07.000Z", newId: () => "id-7" });
+  await store.flush();
   const rekor = new FakeRekor();
   const c = clock();
   const signer = P256Signer.generate();
@@ -73,31 +76,33 @@ test("GET /chain serves the receipts oldest first, with total and head, validate
     const all = await get(`${srv.url}/chain`);
     assert.equal(all.status, 200);
     assert.equal(all.json.stream, "t");
-    assert.equal(all.json.total, 7);
+    assert.equal(all.json.total, 8);
     assert.equal(all.json.since, 0);
-    assert.equal(all.json.count, 7);
+    assert.equal(all.json.count, 8);
+    assert.equal(all.json.next, null, "the whole stream in one call needs no more paging");
     const recs = all.json.records as { id: string; prevHash: string; hash: string }[];
-    assert.deepEqual(recs.map((r) => r.id), ["id-0", "id-1", "id-2", "id-3", "id-4", "id-5", "id-6"]);
+    assert.deepEqual(recs.map((r) => r.id), ["id-0", "id-1", "id-2", "id-3", "id-4", "id-5", "id-6", "id-7"]);
     assert.equal(recs[1]!.prevHash, recs[0]!.hash, "the slice is the chain, linked");
-    assert.deepEqual(all.json.head, { seq: 6, hash: recs[6]!.hash });
+    assert.deepEqual(all.json.head, { seq: 7, hash: recs[7]!.hash });
     assert.deepEqual(Object.keys(recs[0]!), ["id", "ts", "kind", "payload", "prevHash", "hash"], "stored key order survives");
 
     const tail = await get(`${srv.url}/chain?since=5&limit=1`);
     assert.deepEqual((tail.json.records as { id: string }[]).map((r) => r.id), ["id-5"]);
     assert.equal(tail.json.since, 5);
     assert.equal(tail.json.count, 1);
-    assert.equal(tail.json.total, 7);
+    assert.equal(tail.json.total, 8);
 
     const past = await get(`${srv.url}/chain?since=99`);
     assert.equal(past.status, 200);
     assert.equal(past.json.count, 0);
-    assert.equal(past.json.since, 7, "since is clamped to the stream length");
+    assert.equal(past.json.since, 8, "since is clamped to the stream length");
 
-    assert.equal((await get(`${srv.url}/chain?limit=9999`)).json.count, 7, "a large limit is clamped, not rejected");
+    assert.equal((await get(`${srv.url}/chain?limit=9999`)).json.count, 8, "a large limit is clamped, not rejected");
 
     for (const bad of ["since=x", "since=-2", "since=99999999999999999999", "limit=0", "limit=-1", "limit=x", "limit=1.5", "format=xml"]) {
       assert.equal((await get(`${srv.url}/chain?${bad}`)).status, 400, bad);
     }
+    assert.equal((await get(`${srv.url}/chain?format=`)).status, 200, "format= behaves like format absent");
 
     const jl = await fetch(`${srv.url}/chain?format=jsonl&since=4`);
     assert.equal(jl.status, 200);
@@ -105,13 +110,16 @@ test("GET /chain serves the receipts oldest first, with total and head, validate
     const body = await jl.text();
     assert.ok(body.endsWith("\n"), "trailing newline");
     const lines = body.trim().split("\n");
-    assert.equal(lines.length, 3);
+    assert.equal(lines.length, 4);
     assert.equal((JSON.parse(lines[0]!) as { id: string }).id, "id-4");
     assert.equal(Object.keys(JSON.parse(lines[0]!) as object).join(","), "id,ts,kind,payload,prevHash,hash");
+    const lastLine = JSON.parse(lines[3]!) as { id: string; payload: { reason: string } };
+    assert.equal(lastLine.id, "id-7");
+    assert.equal(lastLine.payload.reason, "payée déjà réglée ✓", "the multibyte payload survives byte-accurate framing");
 
     const idx = await get(`${srv.url}/`);
     assert.ok(Object.keys(idx.json.routes as object).some((k) => k.startsWith("GET /chain")), "the index lists the route");
-    assert.match(String(idx.json.verifyWith), /chain\?format=jsonl&limit=500/);
+    assert.match(String(idx.json.verifyWith), /chain\?format=jsonl&since=\$s&limit=500/);
     assert.equal((await fetch(`${srv.url}/chain`, { method: "POST" })).status, 404);
   } finally {
     await srv.close();
@@ -132,12 +140,20 @@ test("GET /chain caps a slice at five hundred records", async () => {
     assert.equal(a.json.count, 500);
     assert.equal(a.json.total, 502);
     assert.equal((a.json.records as { id: string }[])[499]!.id, "id-499");
+    assert.equal(a.json.next, 500, "a full page short of total names the next position");
     const b = await get(`${srv.url}/chain?since=1&limit=600`);
     assert.equal(b.json.count, 500);
     assert.equal((b.json.records as { id: string }[])[0]!.id, "id-1");
+    assert.equal(b.json.next, 501);
     const last = await get(`${srv.url}/chain?since=500`);
     assert.equal(last.json.count, 2);
     assert.deepEqual(last.json.head, { seq: 501, hash: (last.json.records as { hash: string }[])[1]!.hash });
+    assert.equal(last.json.next, null, "a short page names no next position");
+
+    const jlPage = await fetch(`${srv.url}/chain?format=jsonl&since=0&limit=500`);
+    assert.equal(jlPage.headers.get("x-next-since"), "500");
+    const jlLast = await fetch(`${srv.url}/chain?format=jsonl&since=500`);
+    assert.equal(jlLast.headers.get("x-next-since"), null, "a short jsonl page carries no x-next-since header");
   } finally {
     await srv.close();
     await w.close();
@@ -155,7 +171,7 @@ test("GET /chain on an empty stream", async () => {
   try {
     const r = await get(`${srv.url}/chain`);
     assert.equal(r.status, 200);
-    assert.deepEqual(r.json, { stream: "t", total: 0, head: null, since: 0, count: 0, records: [] });
+    assert.deepEqual(r.json, { stream: "t", total: 0, head: null, since: 0, count: 0, next: null, records: [] });
     const jl = await fetch(`${srv.url}/chain?format=jsonl`);
     assert.equal(jl.status, 200);
     assert.equal(jl.headers.get("content-type"), "application/x-ndjson");

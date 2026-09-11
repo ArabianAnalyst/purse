@@ -17,14 +17,14 @@ export function createWitnessServer(w: Witness, cfg: WitnessConfig): Server {
       log: s.log,
       intervalMs: s.intervalMs,
       routes: {
-        "GET /chain?since=<seq>&limit=<n>&format=<json|jsonl>": "the receipts themselves, oldest first from a 0-based position, at most five hundred, jsonl is the file the verifier reads",
+        "GET /chain?since=<seq>&limit=<n>&format=<json|jsonl>": "the receipts themselves, oldest first from a 0-based position, at most five hundred per call with next for the rest, jsonl is the file the verifier reads",
         "GET /anchors?since=<seq>": "the anchors for this stream, oldest first",
         "GET /verify": "verifyAnchored over the live chain and anchors, with the pinned log key and this witness's key",
         "GET /events?since=<n>": "anchored, anchor-failed, anchor-conflict, chain-broken",
         "GET /healthz": "liveness",
         "GET /readyz": "200 only when the last tick verified within the lag window and the head is anchored",
       },
-      verifyWith: `curl -s "<this url>/chain?format=jsonl&limit=500" > chain.jsonl && npx receipt-verify chain.jsonl --anchors <this url> --log-key ${cfg.rekor.logKey.origin}=<base64 DER from Sigstore's trust root> --witness-key ${s.publicKey} --stream ${s.stream}`,
+      verifyWith: `s=0; : > chain.jsonl; while :; do n=$(curl -s "<this url>/chain?format=jsonl&since=$s&limit=500" | tee -a chain.jsonl | wc -l); [ "$n" -lt 500 ] && break; s=$((s+500)); done; npx receipt-verify chain.jsonl --anchors <this url> --log-key ${cfg.rekor.logKey.origin}=<base64 DER from Sigstore's trust root> --witness-key ${s.publicKey} --stream ${s.stream}`,
     };
   };
   const nonNegative = (v: string | null): number | null => {
@@ -56,15 +56,17 @@ export function createWitnessServer(w: Witness, cfg: WitnessConfig): Server {
           const limitRaw = url.searchParams.get("limit");
           const limit = limitRaw == null || limitRaw === "" ? 100 : Number(limitRaw);
           if (!Number.isInteger(limit) || limit < 1) return send(res, 400, { error: "limit must be a positive integer" });
-          const format = url.searchParams.get("format") ?? "json";
+          const format = url.searchParams.get("format") || "json";
           if (format !== "json" && format !== "jsonl") return send(res, 400, { error: "format must be json or jsonl" });
           const c = await w.chain(Math.max(0, since), limit);
           if (format === "jsonl") {
             const text = c.records.map((r) => JSON.stringify(r) + "\n").join("");
-            res.writeHead(200, { "content-type": "application/x-ndjson", "content-length": Buffer.byteLength(text) });
+            const headers: Record<string, string | number> = { "content-type": "application/x-ndjson", "content-length": Buffer.byteLength(text) };
+            if (c.next !== null) headers["x-next-since"] = String(c.next);
+            res.writeHead(200, headers);
             return res.end(text);
           }
-          return send(res, 200, { stream: cfg.stream, total: c.total, head: c.head, since: c.since, count: c.records.length, records: c.records });
+          return send(res, 200, { stream: cfg.stream, total: c.total, head: c.head, since: c.since, count: c.records.length, next: c.next, records: c.records });
         }
         case "/verify": return send(res, 200, await w.verify());
         default: return send(res, 404, { error: "not found" });

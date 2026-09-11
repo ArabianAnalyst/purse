@@ -28,7 +28,7 @@ export interface WitnessState {
   conflictSeq: number | null;
 }
 export interface WitnessOverrides { sqlClient?: SqlClient; fetch?: typeof fetch; now?: () => string; signer?: P256Signer }
-export interface ChainSlice { total: number; head: { seq: number; hash: string } | null; since: number; records: Receipt[] }
+export interface ChainSlice { total: number; head: { seq: number; hash: string } | null; since: number; records: Receipt[]; next: number | null }
 export interface Witness {
   readonly publicKey: string;
   readonly trust: AnchorTrust;
@@ -37,7 +37,7 @@ export interface Witness {
   anchors(sinceSeq?: number): Promise<Anchor[]>;
   events(sinceN?: number): Promise<WitnessEvent[]>;
   verify(): Promise<AnchoredVerifyResult>;
-  /** The receipts themselves, oldest first from `since` (0-based position), at most `limit`, clamped to 500. The same read the verify tick uses. */
+  /** The receipts themselves, oldest first from `since` (0-based position), at most `limit`, clamped to 500. `next` names the position to ask for next, or null when the slice reached the end. May serve a briefly cached read; the verify tick always reads fresh. */
   chain(since?: number, limit?: number): Promise<ChainSlice>;
   ready(): { ok: boolean; reason?: string };
   close(): Promise<void>;
@@ -74,6 +74,9 @@ const EVENTS_SCHEMA = `CREATE TABLE IF NOT EXISTS witness_events (
 
 /** The most records one GET /chain answers. */
 export const CHAIN_LIMIT_MAX = 500;
+
+/** How long chain() may serve a cached full-stream read before loading it again. */
+export const CHAIN_CACHE_MS = 5000;
 
 export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverrides = {}): Promise<Witness> {
   const pool = overrides.sqlClient ? null : new pg.Pool({ connectionString: cfg.databaseUrl });
@@ -120,6 +123,9 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
     const { rows } = await sql.query(`SELECT record FROM ${cfg.table} WHERE stream = $1 ORDER BY seq`, [cfg.stream]);
     return rows.map((r) => JSON.parse(String(r.record)) as Receipt);
   }
+  // chain() is public and unauthenticated, so a burst of verifier calls should not each load the whole
+  // stream. The tick and verify() need a fresh read every time, so they keep calling records() directly.
+  let chainCache: { at: number; all: Receipt[] } | null = null;
   async function event(kind: WitnessEventKind, detail: string): Promise<void> {
     await sql.query("INSERT INTO witness_events (stream, at, kind, detail) VALUES ($1, $2, $3, $4)", [cfg.stream, now(), kind, detail]);
   }
@@ -215,12 +221,16 @@ export async function createWitness(cfg: WitnessConfig, overrides: WitnessOverri
       return verifyAnchored(await records(), list, trust, { stream: cfg.stream });
     },
     async chain(since = 0, limit = 100) {
-      const all = await records();
+      let all: Receipt[];
+      if (chainCache && Date.now() - chainCache.at < CHAIN_CACHE_MS) all = chainCache.all;
+      else { all = await records(); chainCache = { at: Date.now(), all }; }
       const total = all.length;
       const head = total ? { seq: total - 1, hash: all[total - 1]!.hash } : null;
       const from = Math.min(Math.max(0, Math.trunc(since)), total);
       const take = Math.min(Math.max(1, Math.trunc(limit)), CHAIN_LIMIT_MAX);
-      return { total, head, since: from, records: all.slice(from, from + take) };
+      const slice = all.slice(from, from + take);
+      const next = from + slice.length < total ? from + slice.length : null;
+      return { total, head, since: from, records: slice, next };
     },
     ready,
     async close() { if (pool) await pool.end(); },

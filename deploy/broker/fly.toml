@@ -24,6 +24,8 @@ primary_region = "lhr"
   PURSE_ALLOW = "api.stripe.com"
   WITNESS_STREAM = "purse"
   WITNESS_PORT = "8082"
+  # The reference witness port is reached only by machine exec on loopback, so it does not listen on the private network.
+  WITNESS_BIND = "127.0.0.1"
   REKOR_URL = "https://log2025-1.rekor.sigstore.dev"
   # REKOR_LOG_KEY is public and lives here too; set it with `fly secrets set` or paste it, it is the log's public key from Sigstore's trust root.
   MONITOR_STREAM = "purse"

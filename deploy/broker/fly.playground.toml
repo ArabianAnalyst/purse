@@ -51,7 +51,8 @@ primary_region = "lhr"
     path = "/healthz"
 
 # The witness port is public too, on 8082, read-only and without a secret, so anyone can fetch the chain and the
-# anchors and run the verifier. The admin and monitor ports stay private.
+# anchors and run the verifier. The admin and monitor ports stay private. The receipts here are the mock executor's
+# playground payloads, never real spend, which is why this port is safe to leave public.
 [[services]]
   processes = ["witness"]
   internal_port = 8082

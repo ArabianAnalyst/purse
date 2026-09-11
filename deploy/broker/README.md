@@ -199,10 +199,16 @@ curl -s "http://127.0.0.1:8082/chain?format=jsonl&limit=500"     # one receipt p
 
 `since` is the 0-based position in the stream, the same number the anchors carry as `seq`. `total` is the stream length, so a tail is `since = total - n`. `head` is the last record's position and hash, or null on an empty stream.
 
-The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. `npx receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read.
+The check a sceptic runs, with nothing from the operator beyond the two public keys and the chain. The loop pages the chain in slices of five hundred, since `GET /chain` never answers more than that in one call. `npx receipt-verify` is the verifier from `@olurabian/receipt`, a package they can read.
 
 ```sh
-curl -s "http://127.0.0.1:8082/chain?format=jsonl&limit=500" > chain.jsonl
+s=0
+: > chain.jsonl
+while :; do
+  n=$(curl -s "http://127.0.0.1:8082/chain?format=jsonl&since=$s&limit=500" | tee -a chain.jsonl | wc -l)
+  [ "$n" -lt 500 ] && break
+  s=$((s+500))
+done
 npx receipt-verify chain.jsonl --anchors http://127.0.0.1:8082 --log-key "$REKOR_LOG_KEY" --witness-key <public key from GET /> --stream purse
 ```
 
@@ -210,7 +216,7 @@ Exit 0 means the chain verifies and at least one anchor holds. Rewrite a receipt
 
 Readiness on the witness port, `GET /readyz`, is 200 only when the last tick verified the chain within `WITNESS_MAX_LAG` intervals and the head is anchored or the last anchor is younger than that window. A broken chain, a log that will not answer, or a stalled tick all turn it red, and `GET /events` says which. `GET /events` pages by `since` in chunks of one thousand, so a long history takes more than one call to walk. The witness reads `receipts` and writes only `anchors` and `witness_events`; nothing on its port can change anything.
 
-Limits. One witness per stream, a second one on the same stream records a conflict and stops anchoring. The public log's instance URL rotates by year; when it does, set `REKOR_URL` and `REKOR_LOG_KEY` to the new one and old anchors still verify against the old key. Time is not proven by an anchor, only order.
+Limits. One witness per stream, a second one on the same stream records a conflict and stops anchoring. The public log's instance URL rotates by year; when it does, set `REKOR_URL` and `REKOR_LOG_KEY` to the new one and old anchors still verify against the old key. Time is not proven by an anchor, only order. `GET /chain` answers at most five hundred records per call and names the next position in `next`, so a verifier pages until a short page.
 
 ## The monitor
 
@@ -267,7 +273,7 @@ The enforcement property only holds under the deployment contract in the Purse t
 - The admin port is reachable from operators only. Never from the agent's network. A leaked token here is a full compromise, so rotate it like a password.
 - The wallet key reaches the broker as a mounted secret. Nothing in the agent's runtime holds a rail credential.
 - The agent has no other payment tool and no direct access to the rail. If it can pay some other way, the broker is not a boundary, it is a suggestion.
-- The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret, and since 0.3.2 it serves the chain as well as the anchors. Still, put it behind your own network boundary unless you mean to publish it.
+- The witness port is reachable by operators and by anyone you want to be able to verify, since it is read-only and holds nothing secret, and since 0.3.2 it serves the chain as well as the anchors, which means the receipt payloads, your payees, amounts and intents. Publish it only when you mean to publish those.
 - The monitor port is read-only like the witness port. It shows the first eight characters of the project key after `dl_live_` and nothing else secret. Same rule, your own boundary unless you mean to publish it.
 
 ## Known limits
@@ -351,9 +357,12 @@ flyctl apps create purse-playground
 flyctl machine exec <db machine id> -a purse-broker-db "sh -c 'PGPASSWORD=\$OPERATOR_PASSWORD psql -h localhost -U postgres -d postgres -c \"CREATE DATABASE purse_playground\"'"
 flyctl secrets set -a purse-playground DATABASE_URL="<the cluster's connection string with /purse_playground>" PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.2 node dist/witness.js keygen)" REKOR_LOG_KEY=...
 flyctl deploy --config fly.playground.toml -a purse-playground --image ghcr.io/arabiananalyst/purse-broker:0.3.2 --ha=false
+flyctl ips list -a purse-playground
 curl -s https://purse-playground.fly.dev/                 # the agent port
 curl -s https://purse-playground.fly.dev:8082/            # the witness port, public here
 ```
+
+Port 8082 answers over TLS on the shared address. If it does not answer from an IPv4-only network, `flyctl ips allocate-v4 -a purse-playground` gives the app a dedicated address.
 
 `DEADLATCH_PROJECT_KEY` comes from a project on the dashboard, set it the same way and the monitor starts pushing flags. Never reuse the reference deployment's admin token or witness key here.
 
