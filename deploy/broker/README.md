@@ -16,7 +16,7 @@ Only have the image? Point it at your own Postgres and skip straight to routing 
 
 ```bash
 docker run -e DATABASE_URL=... -e PURSE_ADMIN_TOKEN=... -e PURSE_MAX_PER_ACTION='$50' -e PURSE_ALLOW=api.stripe.com \
-  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.2
+  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.3
 ```
 
 1. Start it.
@@ -321,8 +321,8 @@ It prints the number of receipts restored, the head hash, and the verify result,
 flyctl apps create purse-broker
 flyctl postgres create --name purse-broker-db --region lhr --vm-size shared-cpu-1x --initial-cluster-size 1 --volume-size 1
 flyctl postgres attach purse-broker-db -a purse-broker
-flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.2 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
-flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.2 --ha=false
+flyctl secrets set -a purse-broker PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.3 node dist/witness.js keygen)" REKOR_LOG_KEY=... OTEL_EXPORTER_OTLP_ENDPOINT=... OTEL_EXPORTER_OTLP_HEADERS=... OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf
+flyctl deploy --config fly.toml -a purse-broker --image ghcr.io/arabiananalyst/purse-broker:0.3.3 --ha=false
 ```
 
 `--ha=false` matters. Fly's default first deploy creates two machines, and two brokers on one stream is a fork the database will refuse. The attach step sets `DATABASE_URL` for you. `flyctl deploy` creates one machine per process group in `[processes]`, so this same deploy also starts the witness.
@@ -357,8 +357,8 @@ A second app from the same image, for strangers. Its own stream, its own witness
 flyctl apps create purse-playground
 # a database of its own in the existing cluster, created from inside the cluster's machine
 flyctl machine exec <db machine id> -a purse-broker-db "sh -c 'PGPASSWORD=\$OPERATOR_PASSWORD psql -h localhost -U postgres -d postgres -c \"CREATE DATABASE purse_playground\"'"
-flyctl secrets set -a purse-playground DATABASE_URL="<the cluster's connection string with /purse_playground>" PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.2 node dist/witness.js keygen)" REKOR_LOG_KEY=...
-flyctl deploy --config fly.playground.toml -a purse-playground --image ghcr.io/arabiananalyst/purse-broker:0.3.2 --ha=false
+flyctl secrets set -a purse-playground DATABASE_URL="<the cluster's connection string with /purse_playground>" PURSE_ADMIN_TOKEN=... WITNESS_KEY_PEM="$(docker run --rm ghcr.io/arabiananalyst/purse-broker:0.3.3 node dist/witness.js keygen)" REKOR_LOG_KEY=...
+flyctl deploy --config fly.playground.toml -a purse-playground --image ghcr.io/arabiananalyst/purse-broker:0.3.3 --ha=false
 flyctl ips list -a purse-playground
 curl -s https://purse-playground.fly.dev/                 # the agent port
 curl -s https://purse-playground.fly.dev:8082/            # the witness port, public here
