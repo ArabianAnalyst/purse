@@ -65,7 +65,7 @@ export function loadMonitorConfig(env: Env = process.env): MonitorConfig {
   return {
     databaseUrl, stream, table: "receipts",
     intervalMs: int("MONITOR_INTERVAL_MS", env.MONITOR_INTERVAL_MS, 60000, 1000),
-    heartbeatMs: int("MONITOR_HEARTBEAT_MS", env.MONITOR_HEARTBEAT_MS, 30 * 60_000, 1000),
+    heartbeatMs: int("MONITOR_HEARTBEAT_MS", env.MONITOR_HEARTBEAT_MS, 60 * 60_000, 1000),
     window: parseSpan("MONITOR_WINDOW", env.MONITOR_WINDOW ?? "500/24h"),
     velocity: parseSpan("MONITOR_VELOCITY", env.MONITOR_VELOCITY ?? "5/10m"),
     maxBehind: int("MONITOR_MAX_BEHIND", env.MONITOR_MAX_BEHIND, 2500, 0),

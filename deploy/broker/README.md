@@ -123,7 +123,7 @@ Point the agent's MCP client at `http://<broker>:8080/mcp` (streamable HTTP). It
 | `WITNESS_BIND` | `0.0.0.0` | Bind address for the witness port. |
 | `MONITOR_STREAM` | `PURSE_STREAM` or `purse` | The stream the monitor reads. One monitor per stream. |
 | `MONITOR_INTERVAL_MS` | `60000` | How often the monitor reads new receipts. |
-| `MONITOR_HEARTBEAT_MS` | `1800000` | How often the monitor reports in to Deadlatch when nothing happened. Flags still push on the tick they are found. Each heartbeat is a write on the hosted side, so keep it well above the tick. |
+| `MONITOR_HEARTBEAT_MS` | `3600000` | How often the monitor reports in to Deadlatch when nothing happened. Flags still push on the tick they are found. Each heartbeat is a write on the hosted side, so keep it well above the tick. |
 | `MONITOR_WINDOW` | `500/24h` | The sliding window, `<count>/<duration>` with the duration in `m`, `h` or `d`. |
 | `MONITOR_VELOCITY` | `5/10m` | The `payee-velocity` threshold, `<count>/<duration>`. |
 | `MONITOR_MAX_BEHIND` | `2500` | Readiness goes red when the cursor is more than this many receipts behind the chain head. `0` switches the check off. |
