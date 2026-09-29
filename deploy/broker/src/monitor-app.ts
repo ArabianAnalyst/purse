@@ -151,16 +151,28 @@ export async function createMonitorApp(cfg: MonitorConfig, overrides: MonitorApp
   };
 
   const key = cfg.deadlatch.projectKey;
+  /** The cadence the hosted side is told to expect. It judges a monitor late against this, so it is the heartbeat, never shorter than the tick. */
+  const cadenceMs = Math.max(cfg.heartbeatMs, cfg.intervalMs);
   const keyPrefix = key ? key.replace(/^dl_live_/, "").slice(0, 8) : null;
   const inner: Sink = key
-    ? deadlatchSink({ url: cfg.deadlatch.url, projectKey: key, monitor: { version: VERSION, stream: cfg.stream, intervalMs: cfg.intervalMs }, fetch: overrides.fetch, now: () => new Date(now()), onEvent })
+    ? deadlatchSink({ url: cfg.deadlatch.url, projectKey: key, monitor: { version: VERSION, stream: cfg.stream, intervalMs: cadenceMs }, fetch: overrides.fetch, now: () => new Date(now()), onEvent })
     : fileSink(cfg.flagsFile);
   /**
    * Every flag is stored beside the receipts before the push, keyed on its id, so the local record exists when
    * the hosted side is down. The wrapper passes the hosted sink's heartbeat through and hides its own queue, so the
    * engine's `queued` counts exactly the flags the monitor holds.
    */
-  const heartbeat = (inner as { heartbeat?: unknown }).heartbeat;
+  const innerBeat = (inner as { heartbeat?: (s: unknown) => Promise<void> }).heartbeat;
+  let lastBeat = Number.NEGATIVE_INFINITY;
+  /** The monitor calls this every tick. Only one call per cadence reaches the hosted side; the first tick always does. */
+  const heartbeat = innerBeat
+    ? async (s: unknown): Promise<void> => {
+        const t = Date.parse(now());
+        if (t - lastBeat < cadenceMs) return;
+        lastBeat = t;
+        await innerBeat.call(inner, s);
+      }
+    : undefined;
   const sink: Sink & { heartbeat?: unknown } = {
     ...(heartbeat ? { heartbeat } : {}),
     async push(flags: Flag[]) {

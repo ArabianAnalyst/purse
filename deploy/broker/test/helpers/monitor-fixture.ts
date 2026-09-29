@@ -50,6 +50,7 @@ export function monitorCfg(over: Partial<MonitorConfig> = {}): MonitorConfig {
   return {
     databaseUrl: "postgres://unused", stream: "t", table: "receipts",
     intervalMs: 60_000,
+    heartbeatMs: 60_000,
     window: { count: 500, ms: 24 * 60 * 60_000 },
     velocity: { count: 5, ms: 10 * 60_000 },
     maxBehind: 2500,

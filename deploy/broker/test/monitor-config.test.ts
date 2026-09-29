@@ -83,3 +83,9 @@ test("MONITOR_START defaults to head, accepts beginning, and rejects anything el
   assert.equal(loadMonitorConfig({ ...base(), MONITOR_START: "beginning" }).start, "beginning");
   assert.throws(() => loadMonitorConfig({ ...base(), MONITOR_START: "middle" }), /MONITOR_START must be head or beginning, got "middle"/);
 });
+
+test("MONITOR_HEARTBEAT_MS defaults to thirty minutes and is validated", () => {
+  assert.equal(loadMonitorConfig(base()).heartbeatMs, 30 * 60_000);
+  assert.equal(loadMonitorConfig({ ...base(), MONITOR_HEARTBEAT_MS: "600000" }).heartbeatMs, 600_000);
+  assert.throws(() => loadMonitorConfig({ ...base(), MONITOR_HEARTBEAT_MS: "500" }), /MONITOR_HEARTBEAT_MS must be an integer of at least 1000/);
+});

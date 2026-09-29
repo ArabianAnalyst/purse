@@ -286,3 +286,21 @@ test("with MONITOR_START head, an existing cursor row wins over the head", async
   assert.deepEqual(await app.events(), []);
   await app.close();
 });
+
+test("the heartbeat is throttled to heartbeatMs while ticks and flag pushes keep their own pace", async () => {
+  const { app, hosted, c } = await setup({}, { intervalMs: 15_000, heartbeatMs: 30 * 60_000 });
+  await app.tick();
+  assert.equal(hosted.heartbeats().length, 1, "the first tick always reports in");
+  for (let i = 0; i < 10; i++) { c.advance(15_000); await app.tick(); }
+  assert.equal(hosted.heartbeats().length, 1, "ten more ticks inside the half hour send nothing to the hosted side");
+  c.advance(30 * 60_000);
+  await app.tick();
+  assert.equal(hosted.heartbeats().length, 2, "the next tick after the half hour reports in again");
+  assert.equal((hosted.heartbeats()[1]?.body as { intervalMs: number }).intervalMs, 30 * 60_000, "the hosted side is told the heartbeat cadence, so it judges late against it");
+});
+
+test("the reported cadence is never shorter than the tick", async () => {
+  const { app, hosted } = await setup({}, { intervalMs: 120_000, heartbeatMs: 60_000 });
+  await app.tick();
+  assert.equal((hosted.heartbeats()[0]?.body as { intervalMs: number }).intervalMs, 120_000);
+});
