@@ -19,18 +19,22 @@ docker run -e DATABASE_URL=... -e PURSE_ADMIN_TOKEN=... -e PURSE_MAX_PER_ACTION=
   -p 127.0.0.1:8080:8080 -p 127.0.0.1:8081:8081 ghcr.io/arabiananalyst/purse-broker:0.3.3
 ```
 
-1. Start it.
+1. Start it. Two variables first. The admin token is for you. The log key is Sigstore's public key, which the witness needs before it can anchor your chain to the public log. Compose starts the witness either way, so set both before the first start, or the witness runs without the key and you rebuild later.
 
 ```bash
 export PURSE_ADMIN_TOKEN=$(openssl rand -hex 24)
+export REKOR_LOG_KEY="$(curl -sL https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const t=JSON.parse(d).tlogs.find(t=>t.baseUrl.includes("log2025-1"));console.log(new URL(t.baseUrl).host+"="+t.publicKey.rawBytes)})')"
 docker compose up --build
 ```
 
-Using PowerShell instead of bash? Generate the token this way.
+Using PowerShell instead of bash? Set both this way, then run `docker compose up --build`.
 
 ```powershell
 $env:PURSE_ADMIN_TOKEN = -join ((1..48) | ForEach-Object { '{0:x}' -f (Get-Random -Max 16) })
+$env:REKOR_LOG_KEY = ((Invoke-RestMethod 'https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json').tlogs | Where-Object { $_.baseUrl -like '*log2025-1*' } | Select-Object -First 1 | ForEach-Object { ([uri]$_.baseUrl).Host + '=' + $_.publicKey.rawBytes })
 ```
+
+Either way `echo $REKOR_LOG_KEY` should print `log2025-1.rekor.sigstore.dev=` followed by a base64 key. If it prints nothing, fix that before starting.
 
 The broker is up when it prints its two URLs. Postgres holds the receipts. The executor is the mock, which "pays" and returns a receipt, so no money moves.
 
@@ -79,6 +83,12 @@ curl -s localhost:8081/verify -H "authorization: Bearer $PURSE_ADMIN_TOKEN"
 ```
 
 `ok` true means every receipt recomputes and every link holds. `pending` is how many receipts are queued but not yet committed, and `degraded` is null while the store is healthy. Verify independently with twenty lines of plain SHA-256, the recipe is in the [receipt package](https://www.npmjs.com/package/@olurabian/receipt) README.
+
+That is the broker's own view. `anchoredUpTo` is the independent one, the last position the witness has anchored to Sigstore's public log. The witness checks once at start and then every five minutes, so straight after your first spends it reads null. Within five minutes the compose output prints `purse-witness: head seq N anchored at log index X`, and the same call shows the number. The witness port answers the same question without the admin token.
+
+```bash
+curl -s http://127.0.0.1:8082/verify
+```
 
 `/readyz` on the admin port is the one an operator polls before routing traffic. `/healthz` on 8081 stays open without a token so the container health check can reach it even from inside the network the agent cannot see.
 
@@ -181,7 +191,7 @@ curl -sL https://raw.githubusercontent.com/sigstore/root-signing/main/targets/tr
 
 2. The witness key. Generated on first run into `WITNESS_KEY_FILE`, or made once with `node dist/witness.js keygen` and stored as `WITNESS_KEY_PEM`. The public key is printed at start and served on `GET /`. Pin it the way you pin an SSH host key. A rotated witness is a new key; old anchors stay valid under the old one because each anchor carries the key that signed it. Put the old key in `WITNESS_TRUSTED_KEYS` so its anchors still count on `/verify` and toward readiness. The file wins over `WITNESS_KEY_PEM` only when it already exists; when `WITNESS_KEY_FILE` is set but the file is absent and a pem is also given, the witness uses the pem and does not write the file.
 
-Run it with compose. `REKOR_LOG_KEY` is the one variable compose will not default for you.
+Run it with compose. `REKOR_LOG_KEY` is the one variable compose will not default for you. Step 1 of the quick start already sets it, so a stack started that way is anchoring now. Without it the witness refuses to start and compose keeps restarting it, so set it and run compose again.
 
 ```sh
 export REKOR_LOG_KEY="$(curl -sL https://raw.githubusercontent.com/sigstore/root-signing/main/targets/trusted_root.json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>{const t=JSON.parse(d).tlogs.find(t=>t.baseUrl.includes("log2025-1"));console.log(new URL(t.baseUrl).host+"="+t.publicKey.rawBytes)})')"
